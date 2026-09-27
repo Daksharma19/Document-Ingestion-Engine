@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Evaluation output ###
+eval-results/
