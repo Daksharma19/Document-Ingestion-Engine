@@ -4,6 +4,8 @@ import com.docextract.api.ExtractionResponse;
 import com.docextract.document.Document;
 import com.docextract.strategy.ExtractionResult;
 import com.docextract.strategy.ExtractionStrategy;
+import com.docextract.validation.ValidationEngine;
+import com.docextract.validation.ValidationReport;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,9 +21,12 @@ public class ExtractionService {
 
     private final ObjectMapper mapper;
     private final List<ExtractionStrategy> strategies;
+    private final ValidationEngine validationEngine;
 
-    public ExtractionService(ObjectMapper mapper, List<ExtractionStrategy> strategies) {
+    public ExtractionService(ObjectMapper mapper, List<ExtractionStrategy> strategies,
+                             ValidationEngine validationEngine) {
         this.mapper = mapper;
+        this.validationEngine = validationEngine;
         this.strategies = strategies.stream()
                 .sorted(Comparator.comparing(ExtractionStrategy::costTier))
                 .toList();
@@ -37,8 +42,9 @@ public class ExtractionService {
         // Routing comes later; for now always use the cheapest tier.
         ExtractionStrategy strategy = strategies.getFirst();
         ExtractionResult result = strategy.extract(document, schema);
+        ValidationReport report = validationEngine.validate(mapper.valueToTree(result.fields()), schema);
         return new ExtractionResponse(result.fields(), result.confidence(),
-                strategy.costTier().name(), result.costUnits());
+                strategy.costTier().name(), result.costUnits(), report.violations());
     }
 
     private Document toDocument(MultipartFile file) {
