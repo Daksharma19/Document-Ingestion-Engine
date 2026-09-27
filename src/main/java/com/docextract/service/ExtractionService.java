@@ -1,22 +1,30 @@
 package com.docextract.service;
 
 import com.docextract.api.ExtractionResponse;
+import com.docextract.document.Document;
+import com.docextract.strategy.ExtractionResult;
+import com.docextract.strategy.ExtractionStrategy;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.io.IOException;
+import java.util.Comparator;
+import java.util.List;
 
 @Service
 public class ExtractionService {
 
     private final ObjectMapper mapper;
+    private final List<ExtractionStrategy> strategies;
 
-    public ExtractionService(ObjectMapper mapper) {
+    public ExtractionService(ObjectMapper mapper, List<ExtractionStrategy> strategies) {
         this.mapper = mapper;
+        this.strategies = strategies.stream()
+                .sorted(Comparator.comparing(ExtractionStrategy::costTier))
+                .toList();
     }
 
     public ExtractionResponse extract(MultipartFile file, String schemaJson) {
@@ -24,15 +32,21 @@ public class ExtractionService {
             throw new InvalidRequestException("file is required and must not be empty");
         }
         JsonNode schema = parseSchema(schemaJson);
+        Document document = toDocument(file);
 
-        // Stub: echo every schema property with a null value and zero confidence.
-        Map<String, Object> fields = new LinkedHashMap<>();
-        Map<String, Double> confidence = new LinkedHashMap<>();
-        schema.path("properties").fieldNames().forEachRemaining(name -> {
-            fields.put(name, null);
-            confidence.put(name, 0.0);
-        });
-        return new ExtractionResponse(fields, confidence, "STUB", 0);
+        // Routing comes later; for now always use the cheapest tier.
+        ExtractionStrategy strategy = strategies.getFirst();
+        ExtractionResult result = strategy.extract(document, schema);
+        return new ExtractionResponse(result.fields(), result.confidence(),
+                strategy.costTier().name(), result.costUnits());
+    }
+
+    private Document toDocument(MultipartFile file) {
+        try {
+            return new Document(file.getOriginalFilename(), file.getContentType(), file.getBytes());
+        } catch (IOException e) {
+            throw new InvalidRequestException("could not read uploaded file");
+        }
     }
 
     private JsonNode parseSchema(String schemaJson) {

@@ -25,15 +25,15 @@ class DocextractApplicationTests {
     }
 
     @Test
-    void extractReturnsStubShape() throws Exception {
+    void extractReturnsResponseShape() throws Exception {
         var file = new MockMultipartFile("file", "a.txt", "text/plain", "Total: 42".getBytes());
         mvc.perform(multipart("/api/extract").file(file)
                         .param("schema", "{\"type\":\"object\",\"properties\":{\"total\":{\"type\":\"number\"}}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fields").exists())
                 .andExpect(jsonPath("$.confidence.total").value(0.0))
-                .andExpect(jsonPath("$.tier").value("STUB"))
-                .andExpect(jsonPath("$.costUnits").value(0));
+                .andExpect(jsonPath("$.tier").value("NATIVE_TEXT"))
+                .andExpect(jsonPath("$.costUnits").value(1));
     }
 
     @Test
