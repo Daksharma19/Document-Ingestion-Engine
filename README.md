@@ -8,7 +8,7 @@ keyword/regex field mapper, a validation engine, a labelled corpus, and an evalu
 Tier routing and the OCR / layout / vision tiers come later.
 
 ## Requirements
-- Java 25 (Maven is bundled via `./mvnw`, no install needed)
+- Java 21 (Maven is bundled via `./mvnw`, no install needed)
 
 ## Run the API
 ```bash
