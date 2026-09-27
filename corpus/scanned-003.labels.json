@@ -1,0 +1,19 @@
+{
+  "description": "Rasterised invoice with no text layer (stands in for a scan). Needs the OCR or vision tier.",
+  "schema": {
+    "type": "object",
+    "required": ["invoiceNumber", "invoiceDate", "total"],
+    "properties": {
+      "vendor": { "type": "string" },
+      "invoiceNumber": { "type": "string" },
+      "invoiceDate": { "type": "string", "format": "date" },
+      "total": { "type": "number" }
+    }
+  },
+  "expected": {
+    "vendor": "BRIGHT ELECTRICAL",
+    "invoiceNumber": "BE-7781",
+    "invoiceDate": "2023-11-30",
+    "total": 312.50
+  }
+}

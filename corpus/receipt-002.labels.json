@@ -1,0 +1,17 @@
+{
+  "description": "DOCX till receipt. Merchant is unlabelled, the date has no label, and 'Total Items: 3' precedes 'Grand Total'.",
+  "schema": {
+    "type": "object",
+    "required": ["merchant", "purchaseDate", "total"],
+    "properties": {
+      "merchant": { "type": "string" },
+      "purchaseDate": { "type": "string", "format": "date" },
+      "total": { "type": "number" }
+    }
+  },
+  "expected": {
+    "merchant": "Corner Coffee House",
+    "purchaseDate": "2024-01-05",
+    "total": 23.47
+  }
+}

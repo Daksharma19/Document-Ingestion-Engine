@@ -1,0 +1,38 @@
+{
+  "description": "Clean single-page PDF invoice with a native text layer; every scalar field is explicitly labelled.",
+  "schema": {
+    "type": "object",
+    "required": ["invoiceNumber", "invoiceDate", "total"],
+    "properties": {
+      "vendor": { "type": "string" },
+      "invoiceNumber": { "type": "string" },
+      "invoiceDate": { "type": "string", "format": "date" },
+      "lineItems": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": { "type": "string" },
+            "amount": { "type": "number" }
+          }
+        }
+      },
+      "subtotal": { "type": "number" },
+      "tax": { "type": "number" },
+      "total": { "type": "number" }
+    }
+  },
+  "expected": {
+    "vendor": "ACME Supplies Ltd",
+    "invoiceNumber": "INV-2024-001",
+    "invoiceDate": "2024-03-12",
+    "lineItems": [
+      { "description": "Printer paper (10 reams)", "amount": 45.00 },
+      { "description": "Toner cartridge", "amount": 80.00 },
+      { "description": "Delivery", "amount": 15.00 }
+    ],
+    "subtotal": 140.00,
+    "tax": 25.20,
+    "total": 165.20
+  }
+}
