@@ -30,8 +30,8 @@ class DocextractApplicationTests {
         mvc.perform(multipart("/api/extract").file(file)
                         .param("schema", "{\"type\":\"object\",\"properties\":{\"total\":{\"type\":\"number\"}}}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.fields").exists())
-                .andExpect(jsonPath("$.confidence.total").value(0.0))
+                .andExpect(jsonPath("$.fields.total").value(42))
+                .andExpect(jsonPath("$.confidence.total").value(0.8))
                 .andExpect(jsonPath("$.tier").value("NATIVE_TEXT"))
                 .andExpect(jsonPath("$.costUnits").value(1));
     }
