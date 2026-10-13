@@ -38,7 +38,8 @@ public final class SectionExtractor {
         if (lines.isEmpty()) {
             return Optional.empty();
         }
-        boolean bulleted = lines.get().stream().anyMatch(l -> BULLET.matcher(l).find());
+        Pattern bullet = bulletPattern(lines.get());
+        boolean bulleted = lines.get().stream().anyMatch(l -> bullet.matcher(l).find());
         List<String> out = new ArrayList<>();
         List<String> current = new ArrayList<>();
         for (String line : lines.get()) {
@@ -46,11 +47,11 @@ public final class SectionExtractor {
                 out.add(line);
                 continue;
             }
-            if (BULLET.matcher(line).find()) {
+            if (bullet.matcher(line).find()) {
                 if (!current.isEmpty()) {
                     out.add(join(current));
                 }
-                current = new ArrayList<>(List.of(BULLET.matcher(line).replaceFirst("")));
+                current = new ArrayList<>(List.of(bullet.matcher(line).replaceFirst("")));
             } else {
                 current.add(line); // wrapped continuation of the current bullet
             }
@@ -59,6 +60,26 @@ public final class SectionExtractor {
             out.add(join(current));
         }
         return out.isEmpty() ? Optional.empty() : Optional.of(out);
+    }
+
+    /** Characters OCR commonly turns a bullet glyph into ("● NPTEL" read as "e NPTEL"). */
+    private static final Pattern OCR_BULLET = Pattern.compile("^([eo°«»©*+¢~])\\s+(?=\\S)");
+
+    /**
+     * Real bullet glyphs always count. An OCR stand-in counts only when the same one starts at least two lines,
+     * so a sentence that happens to begin with "o" is not split.
+     */
+    static Pattern bulletPattern(List<String> lines) {
+        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+        for (String l : lines) {
+            java.util.regex.Matcher m = OCR_BULLET.matcher(l);
+            if (m.find()) {
+                counts.merge(m.group(1), 1, Integer::sum);
+            }
+        }
+        return counts.entrySet().stream().filter(e -> e.getValue() >= 2).map(java.util.Map.Entry::getKey).findFirst()
+                .map(c -> Pattern.compile(BULLET.pattern() + "|^" + Pattern.quote(c) + "\\s+(?=\\S)"))
+                .orElse(BULLET);
     }
 
     private static Optional<List<String>> lines(String text, Set<String> labels) {

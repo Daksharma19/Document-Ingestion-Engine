@@ -42,6 +42,22 @@ class SectionExtractorTest {
     }
 
     @Test
+    void ocrMisreadBulletsAreRecognisedWhenRepeated() {
+        String ocr = """
+                ACHIEVEMENTS
+                e Topped the cloud course; studied
+                virtualization.
+                e Udemy certification.
+                EDUCATION
+                """;
+        assertThat(SectionExtractor.items(ocr, Set.of("achievements"))).hasValue(List.of(
+                "Topped the cloud course; studied virtualization.", "Udemy certification."));
+        // A single line that merely starts with "o" is not a bullet list.
+        assertThat(SectionExtractor.items("NOTES\no Rourke visited.\nNext line.\n", Set.of("notes")))
+                .hasValue(List.of("o Rourke visited.", "Next line."));
+    }
+
+    @Test
     void aColonLabelFollowedByAnotherLabelIsNotASection() {
         assertThat(SectionExtractor.paragraph(REPORT, Set.of("terms"))).isEmpty();
         assertThat(SectionExtractor.paragraph(REPORT, Set.of("warranty"))).isEmpty();

@@ -70,7 +70,9 @@ public final class LayoutNormalizer {
             return false;
         }
         for (String c : cells) {
-            if (!LABEL_CELL.matcher(c.strip()).matches() || c.contains(":") || c.strip().split("\\s+").length > 4) {
+            // Real captions have at least 3 letters; OCR junk from icons ("or", "AX") does not make a header row.
+            if (!LABEL_CELL.matcher(c.strip()).matches() || c.contains(":") || c.strip().split("\\s+").length > 4
+                    || c.chars().filter(Character::isLetter).count() < 3) {
                 return false;
             }
         }

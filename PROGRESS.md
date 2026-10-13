@@ -86,3 +86,17 @@ hyphenated line breaks re-joined); title-line fallback for subject-name fields (
 text labels need a visible separator (no "Next visit in March" false positives); unlabelled totals only from
 money-formatted amounts (no phone numbers). Result: test-docs native/auto 100% (5/5 exact), synthetic corpus unchanged,
 104 tests passing. Frontend re-checked on :5174 with the résumé schema and the invoice preset.
+
+## OCR improvements (2026-10-13)
+Measured on all 9 labelled documents forced through OCR (5 real in test-docs + 4 synthetic). Every change was
+kept only if the matrix improved; numbers are field accuracy.
+- Baseline (PSM 6, median+Otsu on every page): 67.8%. Cleaning clean pages destroyed them (Haldiram 86% -> 29%).
+- Noise-gated cleaning: speckle detector (share of speck-sized blobs; clean pages <= 0.011, photocopy 0.95, threshold 0.25).
+- Layout clean: invert wide solid dark bars (white-on-dark captions), erase long ruling lines (bordered cells).
+- OCR text clean-up: lone "|" from short borders removed, "JavaScript /TypeScript" re-joined.
+- Bullets misread by OCR ("e NPTEL") recognised when the same marker starts 2+ lines.
+- Tried and rejected: PSM 3 (worse), 400 DPI (no gain, 2x slower), tessdata_best (+~2 points, 5x slower).
+Result: 93.2% (from 67.8%); test-docs OCR 54.8% -> 90.5%. Native/auto unchanged (100%). 108 tests.
+Still wrong under OCR: character confusions with no signal in the text ("+91"->"491", "19"->"l9",
+small bold "SuperStore"->"peers") and one line-order ambiguity (Wordpress item name vs its sub-line).
+Vision tier: key not yet provided to the server; `.tools/secrets.properties` (git-ignored) is now read for it.

@@ -73,6 +73,47 @@ class OcrStrategyTest {
     }
 
     @Test
+    void noiseDetectorSeparatesSpeckledScansFromCleanPages() throws Exception {
+        var detector = new DocumentTypeDetector();
+        java.util.function.Function<String, java.awt.image.BufferedImage> page = f -> {
+            try {
+                var doc = new Document(f, null, Files.readAllBytes(Path.of("corpus", f)));
+                return com.docextract.strategy.text.PageImages.render(doc, detector.detect(doc).kind(), 300, 1).getFirst();
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        };
+        assertThat(ImagePreprocessor.isNoisy(page.apply("scanned-004.pdf"))).isTrue();
+        assertThat(ImagePreprocessor.isNoisy(page.apply("invoice-001.pdf"))).isFalse();
+        assertThat(ImagePreprocessor.isNoisy(page.apply("scanned-003.png"))).isFalse();
+    }
+
+    @Test
+    void layoutCleanInvertsDarkBarsAndErasesRuledLines() {
+        var img = new java.awt.image.BufferedImage(1000, 400, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var g = img.createGraphics();
+        g.setColor(java.awt.Color.WHITE);
+        g.fillRect(0, 0, 1000, 400);
+        g.setColor(new java.awt.Color(40, 40, 40));
+        g.fillRect(50, 50, 900, 60);          // a dark header bar
+        g.setColor(java.awt.Color.WHITE);
+        g.fillRect(100, 70, 20, 20);          // white "text" inside the bar
+        g.setColor(java.awt.Color.BLACK);
+        g.fillRect(50, 300, 900, 3);          // a table rule
+        g.dispose();
+        var out = ImagePreprocessor.layoutClean(img).getRaster();
+        assertThat(out.getSample(500, 60, 0)).as("bar background becomes light").isGreaterThan(200);
+        assertThat(out.getSample(110, 80, 0)).as("its white caption becomes dark").isLessThan(60);
+        assertThat(out.getSample(500, 301, 0)).as("ruled line erased").isEqualTo(255);
+    }
+
+    @Test
+    void ruleArtifactsAndSplitSlashesAreRemovedFromOcrText() {
+        assertThat(OcrEngine.removeRuleArtifacts("|   TOTAL   |   $313.90   |\nJavaScript /TypeScript and a | b"))
+                .isEqualTo("TOTAL       $313.90\nJavaScript/TypeScript and a   b\n");
+    }
+
+    @Test
     void preprocessingRemovesIsolatedSpecklesAndBinarises() {
         int[][] g = new int[5][5];
         for (int[] row : g) {

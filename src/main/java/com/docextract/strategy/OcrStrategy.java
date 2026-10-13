@@ -7,6 +7,7 @@ import com.docextract.strategy.mapping.FieldMapper;
 import com.docextract.strategy.ocr.OcrEngine;
 import com.docextract.strategy.text.PageImages;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -20,13 +21,21 @@ public class OcrStrategy implements ExtractionStrategy {
     private final FieldMapper fieldMapper;
     private final DocumentTypeDetector detector;
     private final int maxPages;
+    private final int dpi;
 
+    public OcrStrategy(OcrEngine ocr, FieldMapper fieldMapper, DocumentTypeDetector detector, int maxPages) {
+        this(ocr, fieldMapper, detector, maxPages, PageImages.OCR_DPI);
+    }
+
+    @Autowired
     public OcrStrategy(OcrEngine ocr, FieldMapper fieldMapper, DocumentTypeDetector detector,
-                       @Value("${docextract.ocr.max-pages:10}") int maxPages) {
+                       @Value("${docextract.ocr.max-pages:10}") int maxPages,
+                       @Value("${docextract.ocr.dpi:300}") int dpi) {
         this.ocr = ocr;
         this.fieldMapper = fieldMapper;
         this.detector = detector;
         this.maxPages = maxPages;
+        this.dpi = dpi;
     }
 
     @Override
@@ -38,7 +47,7 @@ public class OcrStrategy implements ExtractionStrategy {
         if (!supports(kind)) {
             throw new UnsupportedDocumentException("OCR needs a PDF or image, got " + kind + " for " + document.filename());
         }
-        String text = ocr.recognise(PageImages.render(document, kind, PageImages.OCR_DPI, maxPages));
+        String text = ocr.recognise(PageImages.render(document, kind, dpi, maxPages));
         FieldMapper.MappedFields mapped = fieldMapper.map(text, schema);
         return new ExtractionResult(mapped.fields(), mapped.confidence(), text, costTier().costUnits());
     }
