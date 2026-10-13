@@ -1,5 +1,6 @@
 package com.docextract.validation;
 
+import com.docextract.validation.expr.RuleExpression;
 import com.docextract.validation.rules.DatesValidRule;
 import com.docextract.validation.rules.LineItemsSumRule;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -119,6 +120,58 @@ class ValidationEngineTest {
     void rulesSkipWhenTheirFieldsAreAbsent() throws Exception {
         JsonNode schema = json.readTree("{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}}}");
         assertThat(engine.validate(json.readTree("{\"name\":\"Bob\"}"), schema).isValid()).isTrue();
+    }
+
+    @Test
+    void failingExpressionRuleImplicatesEveryReferencedField() throws Exception {
+        JsonNode schema = json.readTree("""
+                {"type":"object","x-rules":["sum(lineItems[].amount) == subtotal"],
+                 "properties":{"invoiceNumber":{"type":"string"},"subtotal":{"type":"number"},
+                   "lineItems":{"type":"array"}}}""");
+        var report = engine.validate(json.readTree("""
+                {"invoiceNumber":"X","subtotal":100,"lineItems":[{"amount":60},{"amount":30}]}"""), schema);
+        // The built-in line-items-sum bean catches the same mismatch independently.
+        assertThat(rules(report)).containsExactlyInAnyOrder(ValidationEngine.EXPRESSION_RULE, "line-items-sum");
+        assertThat(report.violations()).filteredOn(v -> v.rule().equals(ValidationEngine.EXPRESSION_RULE))
+                .singleElement().satisfies(v -> {
+            assertThat(v.relatedFields()).containsExactly("lineItems", "subtotal");
+            assertThat(v.message()).contains("left=90").contains("right=100");
+        });
+        assertThat(report.fieldPassed(schema))
+                .containsEntry("invoiceNumber", true)
+                .containsEntry("subtotal", false)
+                .containsEntry("lineItems", false);
+        assertThat(report.ruleResults()).singleElement()
+                .satisfies(r -> assertThat(r.outcome()).isEqualTo(RuleResult.Outcome.FAILED));
+    }
+
+    @Test
+    void requestRulesRunAlongsideSchemaRulesAndSkipWhenFieldsAbsent() throws Exception {
+        var report = engine.validate(json.readTree("{\"invoiceNumber\":\"X\",\"total\":10}"), json.readTree(INVOICE_SCHEMA),
+                List.of(RuleExpression.parse("total > 0"), RuleExpression.parse("tax < total")));
+        assertThat(report.ruleResults()).extracting(RuleResult::outcome)
+                .containsExactly(RuleResult.Outcome.PASSED, RuleResult.Outcome.SKIPPED);
+        assertThat(report.isValid()).isTrue();
+    }
+
+    @Test
+    void formatsAreAsserted() throws Exception {
+        JsonNode schema = json.readTree("{\"type\":\"object\",\"properties\":{\"email\":{\"type\":\"string\",\"format\":\"email\"}}}");
+        assertThat(engine.validate(json.readTree("{\"email\":\"not-an-email\"}"), schema).violations())
+                .singleElement().satisfies(v -> assertThat(v.field()).isEqualTo("email"));
+        assertThat(engine.validate(json.readTree("{\"email\":\"a@b.com\"}"), schema).isValid()).isTrue();
+    }
+
+    @Test
+    void perFieldResultMarksWrongTypeAndMissingRequired() throws Exception {
+        JsonNode schema = json.readTree(INVOICE_SCHEMA);
+        var report = engine.validateExtraction(json.readTree("{\"invoiceNumber\":null,\"total\":\"ten\",\"tax\":null}"),
+                schema, List.of());
+        assertThat(report.fieldPassed(schema))
+                .containsEntry("invoiceNumber", false) // required but not found
+                .containsEntry("total", false)         // wrong type
+                .containsEntry("tax", true)            // optional and not found: absence is fine
+                .containsEntry("invoiceDate", true);
     }
 
     @Test

@@ -74,11 +74,38 @@ class EvaluatorTest {
     }
 
     @Test
-    void nullPredictionCountsAsViolationAndMissing() throws Exception {
-        var report = evaluator.evaluate(fixed(null), List.of(labelled("a", "{\"total\":10}")));
-        DocumentScore d = report.documents().getFirst();
-        assertThat(d.count(FieldOutcome.MISSING)).isEqualTo(1);
-        assertThat(d.passedValidation()).isFalse();
+    void nullPredictionIsMissingAndFailsValidationOnlyWhenRequired() throws Exception {
+        var optional = evaluator.evaluate(fixed(null), List.of(labelled("a", "{\"total\":10}"))).documents().getFirst();
+        assertThat(optional.count(FieldOutcome.MISSING)).isEqualTo(1);
+        assertThat(optional.passedValidation()).as("not found is absence, not a type error").isTrue();
+
+        JsonNode required = json.readTree("{\"type\":\"object\",\"required\":[\"total\"],\"properties\":{\"total\":{\"type\":\"number\"}}}");
+        var doc = new LabeledDocument("r", new Document("r.txt", "text/plain", new byte[]{1}), required, json.readTree("{\"total\":10}"));
+        assertThat(evaluator.evaluate(fixed(null), List.of(doc)).documents().getFirst().passedValidation()).isFalse();
+    }
+
+    @Test
+    void unsupportedDocumentIsSkippedNotScored() throws Exception {
+        ExtractionStrategy unsupported = new ExtractionStrategy() {
+            @Override
+            public ExtractionResult extract(Document document, JsonNode schema) {
+                throw new com.docextract.strategy.UnsupportedDocumentException("no page image");
+            }
+
+            @Override
+            public CostTier costTier() {
+                return CostTier.OCR;
+            }
+
+            @Override
+            public String name() {
+                return "ocr-like";
+            }
+        };
+        var report = evaluator.evaluate(unsupported, List.of(labelled("a", "{\"total\":10}")));
+        assertThat(report.documents()).isEmpty();
+        assertThat(report.skipped()).singleElement().satisfies(s -> assertThat(s.reason()).contains("no page image"));
+        assertThat(report.totalCostUnits()).isZero();
     }
 
     @Test

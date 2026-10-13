@@ -64,9 +64,9 @@ class KeywordRegexFieldMapperTest {
 
     @Test
     void missingFieldIsNullWithZeroConfidence() throws Exception {
-        var result = mapper.map("nothing here", schema("{\"vendor\":{\"type\":\"string\"},\"items\":{\"type\":\"array\"}}"));
-        assertThat(result.fields()).containsEntry("vendor", null).containsEntry("items", null);
-        assertThat(result.confidence()).containsEntry("vendor", 0.0);
+        var result = mapper.map("nothing here", schema("{\"notes\":{\"type\":\"string\"},\"items\":{\"type\":\"array\"}}"));
+        assertThat(result.fields()).containsEntry("notes", null).containsEntry("items", null);
+        assertThat(result.confidence()).containsEntry("notes", 0.0);
     }
 
     @Test
@@ -75,5 +75,39 @@ class KeywordRegexFieldMapperTest {
         assertThat(ValueParsers.parseDate("12/03/2024")).hasValueSatisfying(d -> assertThat(d).hasToString("2024-03-12"));
         assertThat(ValueParsers.parseDate("March 12, 2024")).hasValueSatisfying(d -> assertThat(d).hasToString("2024-03-12"));
         assertThat(ValueParsers.parseDate("31/02/2024")).isEmpty();
+    }
+
+    @Test
+    void skipsALongerLabelThatStartsWithTheFieldName() throws Exception {
+        var result = mapper.map("Total Items: 3\nGrand Total: £23.47", schema("{\"total\":{\"type\":\"number\"}}"));
+        assertThat(result.fields()).containsEntry("total", new BigDecimal("23.47"));
+    }
+
+    @Test
+    void subtotalIsNotGuessedFromTheLargestAmount() throws Exception {
+        var result = mapper.map("Paid 10.00 and 99.99", schema("{\"subtotal\":{\"type\":\"number\"}}"));
+        assertThat(result.fields()).containsEntry("subtotal", null);
+    }
+
+    @Test
+    void stringValueStopsAtAColumnGapAndDropsTrailingNoise() {
+        assertThat(KeywordRegexFieldMapper.cleanString("NW-55012.  a    |      a    |")).hasValue("NW-55012");
+        assertThat(KeywordRegexFieldMapper.cleanString("ACME Supplies Ltd")).hasValue("ACME Supplies Ltd");
+        assertThat(KeywordRegexFieldMapper.cleanString(" | ")).isEmpty();
+    }
+
+    @Test
+    void identifierFieldsRejoinDigitGroupsSplitByOcr() throws Exception {
+        var result = mapper.map("Invoice Number: NW-550 12", schema("{\"invoiceNumber\":{\"type\":\"string\"},\"notes\":{\"type\":\"string\"}}"));
+        assertThat(result.fields()).containsEntry("invoiceNumber", "NW-55012");
+        assertThat(KeywordRegexFieldMapper.isIdentifier("description")).isFalse();
+    }
+
+    @Test
+    void unlabelledVendorIsTheFirstNameLikeLine() throws Exception {
+        var result = mapper.map("\n12/01/2024\nCorner Coffee House\n12 High Street\nTotal: 4.00",
+                schema("{\"merchant\":{\"type\":\"string\"}}"));
+        assertThat(result.fields()).containsEntry("merchant", "Corner Coffee House");
+        assertThat(result.confidence().get("merchant")).isEqualTo(KeywordRegexFieldMapper.FALLBACK);
     }
 }

@@ -5,7 +5,15 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /** Aggregate metrics for one strategy over a corpus. */
-public record EvaluationReport(String strategy, List<DocumentScore> documents) {
+public record EvaluationReport(String strategy, List<DocumentScore> documents, List<Skipped> skipped) {
+
+    /** A document the tier could not attempt (unsupported format or tier not configured); excluded from metrics. */
+    public record Skipped(String document, String reason) {
+    }
+
+    public EvaluationReport(String strategy, List<DocumentScore> documents) {
+        this(strategy, documents, List.of());
+    }
 
     public record FieldStats(int total, int correct, int wrong, int missing) {
         public double accuracy() {

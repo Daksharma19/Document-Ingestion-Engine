@@ -3,6 +3,7 @@
   "schema": {
     "type": "object",
     "required": ["invoiceNumber", "invoiceDate", "total"],
+    "x-rules": ["sum(lineItems[].amount) == subtotal", "subtotal + tax == total"],
     "properties": {
       "vendor": { "type": "string" },
       "invoiceNumber": { "type": "string" },

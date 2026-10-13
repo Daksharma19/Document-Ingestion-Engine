@@ -60,6 +60,52 @@ public final class SampleCorpusGenerator {
                 "Invoice No: BE-7781",
                 "Invoice Date: 2023-11-30",
                 "Total: 312.50"));
+
+        scannedPdf(dir.resolve("scanned-004.pdf"), List.of(
+                "NORTHWIND LOGISTICS",
+                "Invoice Number: NW-55012",
+                "Invoice Date: 14 February 2024",
+                "",
+                "Freight charge            220.00",
+                "Fuel surcharge             35.50",
+                "",
+                "Subtotal: 255.50",
+                "Tax: 25.55",
+                "Total Due: 281.05"));
+    }
+
+    /**
+     * An image-only PDF that looks like a photocopy: text drawn at 200 DPI, rotated 0.8 degrees, with
+     * speckle noise, then embedded as a page image. There is no text layer, so only OCR/vision can read it.
+     */
+    private static void scannedPdf(Path out, List<String> lines) throws Exception {
+        int w = 1700;
+        int h = 2200;
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g.setColor(new Color(245, 245, 245));
+        g.fillRect(0, 0, w, h);
+        g.rotate(Math.toRadians(0.8), w / 2.0, h / 2.0);
+        g.setColor(new Color(30, 30, 30));
+        g.setFont(new Font(Font.SERIF, Font.PLAIN, 40));
+        for (int i = 0; i < lines.size(); i++) {
+            g.drawString(lines.get(i), 160, 260 + i * 70);
+        }
+        g.dispose();
+        java.util.Random rnd = new java.util.Random(4);
+        for (int i = 0; i < 6000; i++) {
+            img.setRGB(rnd.nextInt(w), rnd.nextInt(h), rnd.nextBoolean() ? 0x707070 : 0xffffff);
+        }
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(org.apache.pdfbox.pdmodel.common.PDRectangle.LETTER);
+            doc.addPage(page);
+            var image = org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory.createFromImage(doc, img);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.drawImage(image, 0, 0, page.getMediaBox().getWidth(), page.getMediaBox().getHeight());
+            }
+            doc.save(out.toFile());
+        }
     }
 
     private static void pdf(Path out, List<String> lines) throws Exception {

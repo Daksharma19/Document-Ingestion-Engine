@@ -22,7 +22,7 @@ class CorpusLoaderTest {
     void loadsTheCheckedInSampleCorpus() throws Exception {
         var docs = loader.load(Path.of("corpus"));
         assertThat(docs).extracting(LabeledDocument::name)
-                .containsExactly("invoice-001", "receipt-002", "scanned-003");
+                .containsExactly("invoice-001", "receipt-002", "scanned-003", "scanned-004");
         assertThat(docs).allSatisfy(d -> assertThat(d.document().bytes()).isNotEmpty());
     }
 

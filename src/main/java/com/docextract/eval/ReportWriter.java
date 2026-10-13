@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /** Console tables for humans, CSV (one row per strategy/document/field) for analysis. */
 public final class ReportWriter {
@@ -49,7 +50,45 @@ public final class ReportWriter {
                 List.of("valid-but-wrong documents", String.valueOf(r.validButWrongCount())),
                 List.of("errors", String.valueOf(r.errorCount())),
                 List.of("total cost units", String.valueOf(r.totalCostUnits())),
-                List.of("mean cost / document", String.format(Locale.ROOT, "%.2f", r.meanCostPerDocument()))));
+                List.of("mean cost / document", String.format(Locale.ROOT, "%.2f", r.meanCostPerDocument())),
+                List.of("skipped (tier cannot read)", String.valueOf(r.skipped().size()))));
+        if (!r.skipped().isEmpty()) {
+            out.println();
+            out.println("Skipped (not counted in the metrics above)");
+            table(out, List.of("document", "reason"),
+                    r.skipped().stream().map(s -> List.of(s.document(), s.reason())).toList());
+        }
+    }
+
+    /** One row per tier, side by side: the accuracy-vs-cost trade-off the router is meant to exploit. */
+    public static void printComparison(List<EvaluationReport> reports, Map<String, String> notConfigured, PrintStream out) {
+        out.println();
+        out.println("=== Tier comparison ===");
+        List<List<String>> rows = new ArrayList<>();
+        for (EvaluationReport r : reports) {
+            rows.add(List.of(r.strategy(), r.documents().size() + "/" + (r.documents().size() + r.skipped().size()),
+                    pct(r.fieldAccuracy()), pct(r.meanDocumentAccuracy()), pct(r.exactMatchRate()),
+                    String.valueOf(r.validButWrongCount()), String.format(Locale.ROOT, "%.2f", r.meanCostPerDocument()),
+                    String.valueOf(r.totalCostUnits())));
+        }
+        notConfigured.forEach((name, reason) -> rows.add(List.of(name, "-", "not configured", "-", "-", "-", "-", "-")));
+        table(out, List.of("strategy", "docs run", "field acc", "doc acc", "exact", "valid-but-wrong",
+                "cost/doc", "total cost"), rows);
+    }
+
+    public static void writeTierCsv(List<EvaluationReport> reports, Map<String, String> notConfigured, Path tiersCsv) throws IOException {
+        List<String> rows = new ArrayList<>();
+        rows.add("strategy,status,documents_run,documents_skipped,field_accuracy,document_accuracy,exact_match_rate,valid_but_wrong,errors,total_cost_units,mean_cost_per_document");
+        for (EvaluationReport r : reports) {
+            rows.add(csvRow(r.strategy(), "ran", String.valueOf(r.documents().size()), String.valueOf(r.skipped().size()),
+                    String.format(Locale.ROOT, "%.4f", r.fieldAccuracy()),
+                    String.format(Locale.ROOT, "%.4f", r.meanDocumentAccuracy()),
+                    String.format(Locale.ROOT, "%.4f", r.exactMatchRate()),
+                    String.valueOf(r.validButWrongCount()), String.valueOf(r.errorCount()),
+                    String.valueOf(r.totalCostUnits()), String.format(Locale.ROOT, "%.2f", r.meanCostPerDocument())));
+        }
+        notConfigured.forEach((name, reason) -> rows.add(csvRow(name, "not configured: " + reason, "", "", "", "", "", "", "", "", "")));
+        Files.write(tiersCsv, rows);
     }
 
     public static void writeCsv(List<EvaluationReport> reports, Path fieldsCsv, Path documentsCsv) throws IOException {

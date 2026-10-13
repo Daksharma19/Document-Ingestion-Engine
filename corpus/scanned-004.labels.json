@@ -1,0 +1,24 @@
+{
+  "description": "Synthetic image-only PDF (rotated 0.8 deg, speckle noise) standing in for a photocopied scan; no text layer. Routed to OCR.",
+  "schema": {
+    "type": "object",
+    "required": ["invoiceNumber", "invoiceDate", "total"],
+    "x-rules": ["subtotal + tax == total"],
+    "properties": {
+      "vendor": { "type": "string" },
+      "invoiceNumber": { "type": "string" },
+      "invoiceDate": { "type": "string", "format": "date" },
+      "subtotal": { "type": "number" },
+      "tax": { "type": "number" },
+      "total": { "type": "number", "x-labels": ["Total Due"] }
+    }
+  },
+  "expected": {
+    "vendor": "NORTHWIND LOGISTICS",
+    "invoiceNumber": "NW-55012",
+    "invoiceDate": "2024-02-14",
+    "subtotal": 255.50,
+    "tax": 25.55,
+    "total": 281.05
+  }
+}
