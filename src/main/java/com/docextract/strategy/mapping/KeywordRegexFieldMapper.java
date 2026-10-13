@@ -16,13 +16,15 @@ import java.util.regex.Pattern;
 
 /**
  * Naive baseline: find "Label: value" on a line, then coerce the value by the schema type.
- * Only top-level scalar properties are filled; arrays/objects are left null.
+ * Top-level scalars are filled by label (plus a built-in invoice vocabulary); arrays of items via {@link LineItemExtractor}.
  */
 @Component
 public class KeywordRegexFieldMapper implements FieldMapper {
 
     static final double LABELLED = 0.8;
     static final double FALLBACK = 0.3;
+    /** Table rows are found structurally, not by an explicit label: between the two. */
+    static final double TABLE = 0.5;
 
     /** The "value" is really the rest of a longer label: one or two words then a colon. */
     private static final Pattern LONGER_LABEL = Pattern.compile("\\s*[A-Za-z][A-Za-z]*(?:\\s+[A-Za-z]+)?\\s*:");
@@ -44,6 +46,9 @@ public class KeywordRegexFieldMapper implements FieldMapper {
 
     private Optional<Found> findField(String text, String name, JsonNode prop) {
         Kind kind = Kind.of(prop);
+        if ("array".equals(prop.path("type").asText()) && isItemTable(name, prop)) {
+            return LineItemExtractor.extract(text, prop.path("items")).map(items -> new Found(items, TABLE));
+        }
         if (kind == Kind.UNSUPPORTED) {
             return Optional.empty();
         }
@@ -68,9 +73,10 @@ public class KeywordRegexFieldMapper implements FieldMapper {
 
     // Label must not be preceded by a letter, so "Total" does not match inside "Subtotal".
     private static Pattern labelPattern(String label) {
-        String words = String.join("[\\s_-]*",
+        // Horizontal whitespace only: a label at the end of one line must not take its value from the next line.
+        String words = String.join("[ \\t_-]*",
                 Arrays.stream(label.trim().split("\\s+")).map(Pattern::quote).toList());
-        return Pattern.compile("(?<![A-Za-z])" + words + "(?![A-Za-z])\\s*[:#-]?\\s*([^\\n\\r]+)",
+        return Pattern.compile("(?<![A-Za-z])" + words + "(?![A-Za-z])[ \\t]*[:#-]?[ \\t]*([^\\n\\r]+)",
                 Pattern.CASE_INSENSITIVE);
     }
 
@@ -80,6 +86,7 @@ public class KeywordRegexFieldMapper implements FieldMapper {
         if (prop.hasNonNull("title")) {
             labels.add(prop.get("title").asText());
         }
+        InvoiceVocabulary.conceptOf(name).ifPresent(c -> labels.addAll(c.labels()));
         String fromName = name.replaceAll("([a-z0-9])([A-Z])", "$1 $2").replace('_', ' ').toLowerCase();
         labels.add(fromName);
         if (fromName.endsWith(" number")) {
@@ -111,6 +118,12 @@ public class KeywordRegexFieldMapper implements FieldMapper {
         return v.isEmpty() ? Optional.empty() : Optional.of(v);
     }
 
+    /** An array of objects, or an array whose name says it lists items/lines/products. */
+    static boolean isItemTable(String name, JsonNode prop) {
+        return "object".equals(prop.path("items").path("type").asText())
+                || name.toLowerCase().matches(".*(item|line|product|entries|charges|services).*");
+    }
+
     static boolean isIdentifier(String name) {
         return name.matches("(?i).*(number|no|num|id|code|ref|reference)$");
     }
@@ -123,17 +136,37 @@ public class KeywordRegexFieldMapper implements FieldMapper {
     // Unlabelled guesses: first date in the document; largest amount for total-like fields (not subtotals);
     // for party-name fields, the first line that is a name rather than an address or amount.
     private static Optional<Object> fallback(String text, String name, Kind kind) {
-        String lower = name.toLowerCase();
-        if (kind == Kind.DATE) {
-            return ValueParsers.firstDate(text).map(d -> (Object) d.toString());
+        Optional<InvoiceVocabulary.Concept> concept = InvoiceVocabulary.conceptOf(name);
+        if (concept.isEmpty()) {
+            // Unknown field: only an unlabelled date can be guessed with any sense.
+            return kind == Kind.DATE ? ValueParsers.firstDate(text).map(d -> (Object) d.toString()) : Optional.empty();
         }
-        if (kind == Kind.NUMBER && lower.matches(".*(total|amount|due).*") && !lower.contains("sub")) {
-            return ValueParsers.allAmounts(text).stream().max(Comparator.naturalOrder()).map(b -> (Object) b);
+        return switch (concept.get()) {
+            // The issue date is usually the first date printed; a due date cannot be guessed that way.
+            case INVOICE_DATE -> kind == Kind.DATE ? ValueParsers.firstDate(text).map(d -> (Object) d.toString()) : Optional.empty();
+            case TOTAL -> kind == Kind.NUMBER
+                    ? ValueParsers.allAmounts(text).stream().max(Comparator.naturalOrder()).map(b -> (Object) b)
+                    : Optional.empty();
+            case TAX -> kind == Kind.NUMBER ? taxSummary(text).map(b -> (Object) b) : Optional.empty();
+            case VENDOR -> kind == Kind.STRING ? firstNameLine(text) : Optional.empty();
+            case CURRENCY -> kind == Kind.STRING ? InvoiceVocabulary.detectCurrency(text).map(c -> (Object) c) : Optional.empty();
+            default -> Optional.empty();
+        };
+    }
+
+    /** A tax-summary row: a tax name followed only by numbers/rates, e.g. "CGST 54.33 2.50% 1.36" or "VAT 20% 12.00". */
+    private static final Pattern TAX_ROW = Pattern.compile(
+            "(?im)^[ \\t]*(?:CGST|SGST|UTGST|IGST|GST|VAT|Sales[ \\t]+Tax|Cess)\\b[ \\t]*(?:\\(?[\\d.,]+%\\)?[ \\t]*|[\\d.,]+[ \\t]*)*?([\\d,]+\\.\\d{2})[ \\t]*$");
+
+    /** Sum of the last amount on every tax-summary row (CGST + SGST, VAT bands, ...). */
+    static Optional<BigDecimal> taxSummary(String text) {
+        Matcher m = TAX_ROW.matcher(text);
+        BigDecimal sum = null;
+        while (m.find()) {
+            BigDecimal v = new BigDecimal(m.group(1).replace(",", ""));
+            sum = sum == null ? v : sum.add(v);
         }
-        if (kind == Kind.STRING && lower.matches(".*(vendor|merchant|supplier|seller|company|issuer|store).*")) {
-            return firstNameLine(text);
-        }
-        return Optional.empty();
+        return Optional.ofNullable(sum);
     }
 
     /** First non-blank line made only of letters and name punctuation (no digits, no "Label:"). */

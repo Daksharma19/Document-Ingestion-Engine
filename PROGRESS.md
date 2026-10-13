@@ -37,7 +37,7 @@ while looking at them (column-gap trimming, digit-group rejoining, longer-label 
 They show that the pipeline and harness work end to end, nothing more.
 
 ## Known limitations
-- Line items (arrays/objects) are not extracted by the keyword mapper (the only remaining miss on the corpus).
+- Line items come from a generic text-table heuristic (header row → numeric trailing columns → summary line); unusual layouts (descriptions after the numbers, wrapped columns) will still miss.
 - Slash dates are parsed day-first (dd/MM/yyyy).
 - Cost units are relative tier weights, not measured money or latency.
 - The vision tier does not escalate automatically; it must be requested with `tier=vision-llm`.
@@ -48,3 +48,12 @@ They show that the pipeline and harness work end to end, nothing more.
 - Collect and label the real corpus (checklist), with a held-out split.
 - Router escalation: cheapest tier first, escalate on validation failure.
 - Line-item extraction (layout tier).
+
+## Generic invoice mapping (after the phase 2 commit)
+- Built-in invoice vocabulary: the concept is recognised from the field name (`grandTotal`, `amount_due`, `billNo`, ...), with prioritised label synonyms (Amount Payable > Grand Total > Total, ...).
+- Dates in any numeric separator (`28-09-2026`, `14.02.25`, `2025/02/14`), ordinals, `12-Mar-2024`; Indian lakh grouping; `%` rates are not amounts.
+- Currency detection; tax-summary rows (CGST+SGST, VAT bands) summed when tax is not labelled.
+- Generic line-item table reader.
+- Fix: a label at the end of a line no longer takes its value from the next line.
+- Checked on one real invoice (an Indian POS tax invoice; not committed). Native tier: every extracted field matches the document; subtotal is not printed as a labelled value, so it stays null. The OCR tier on the same file is noticeably worse (vendor from logo, invoice number lost, ₹ read as £).
+- Tests: 95 passing; new tests use US, EU-VAT and Indian-GST invoice texts.

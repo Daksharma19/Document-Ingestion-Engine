@@ -19,16 +19,18 @@ final class ValueParsers {
     }
 
     // Optional currency symbol/code, then a number with optional thousands separators and decimals.
+    // Grouping covers both 1,234,567.00 and the Indian lakh style 12,34,567.00.
     static final Pattern AMOUNT = Pattern.compile(
-            "(?:[$€£₹]|USD|EUR|GBP|INR)?\\s?(-?\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|-?\\d+(?:\\.\\d+)?)");
+            "(?:[$€£₹]|USD|EUR|GBP|INR|Rs\\.?)?\\s?(-?\\d{1,3}(?:,\\d{2,3})*,\\d{3}(?:\\.\\d+)?|-?\\d+(?:\\.\\d+)?)");
 
     private static final String MONTHS =
             "Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?";
 
     static final Pattern DATE = Pattern.compile(
-            "\\b(\\d{4}-\\d{2}-\\d{2}"
-                    + "|\\d{1,2}/\\d{1,2}/\\d{4}"
-                    + "|\\d{1,2}\\s+(?:" + MONTHS + ")\\.?\\s+\\d{4}"
+            "\\b(\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}"
+                    + "|\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{4}"
+                    + "|\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{2}(?![\\d.])"
+                    + "|\\d{1,2}(?:st|nd|rd|th)?[\\s-]+(?:" + MONTHS + ")\\.?[\\s,-]+\\d{4}"
                     + "|(?:" + MONTHS + ")\\.?\\s+\\d{1,2},?\\s+\\d{4})\\b",
             Pattern.CASE_INSENSITIVE);
 
@@ -48,7 +50,13 @@ final class ValueParsers {
 
     static Optional<BigDecimal> firstAmount(String s) {
         Matcher m = AMOUNT.matcher(s);
-        return m.find() ? Optional.of(new BigDecimal(m.group(1).replace(",", ""))) : Optional.empty();
+        while (m.find()) {
+            // "8.5%" is a rate, not money.
+            if (!s.substring(m.end()).matches("(?s)\\s*%.*")) {
+                return Optional.of(new BigDecimal(m.group(1).replace(",", "")));
+            }
+        }
+        return Optional.empty();
     }
 
     /** Dates are blanked out first so their digits are not read as amounts. */
@@ -72,8 +80,23 @@ final class ValueParsers {
         return Optional.empty();
     }
 
+    private static final Pattern YEAR_FIRST = Pattern.compile("(\\d{4})[-/.](\\d{1,2})[-/.](\\d{1,2})");
+    private static final Pattern DAY_FIRST = Pattern.compile("(\\d{1,2})[-/.](\\d{1,2})[-/.](\\d{2}|\\d{4})");
+
     static Optional<LocalDate> parseDate(String raw) {
-        String cleaned = raw.replace(",", "").replace(".", "").replaceAll("\\s+", " ").trim();
+        String t = raw.trim();
+        // All-numeric dates: normalise any separator; year-first is unambiguous, otherwise day-first.
+        Matcher m = YEAR_FIRST.matcher(t);
+        if (m.matches()) {
+            return safeDate(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)), Integer.parseInt(m.group(3)));
+        }
+        m = DAY_FIRST.matcher(t);
+        if (m.matches()) {
+            int year = Integer.parseInt(m.group(3));
+            return safeDate(year < 100 ? 2000 + year : year, Integer.parseInt(m.group(2)), Integer.parseInt(m.group(1)));
+        }
+        String cleaned = t.replaceAll("(?i)(\\d)(st|nd|rd|th)\\b", "$1").replace("-", " ")
+                .replace(",", "").replace(".", "").replaceAll("\\s+", " ").trim();
         cleaned = cleaned.replaceAll("(?i)\\bSept\\b", "Sep");
         for (DateTimeFormatter f : DATE_FORMATS) {
             try {
@@ -83,5 +106,13 @@ final class ValueParsers {
             }
         }
         return Optional.empty();
+    }
+
+    private static Optional<LocalDate> safeDate(int y, int mo, int d) {
+        try {
+            return Optional.of(LocalDate.of(y, mo, d));
+        } catch (java.time.DateTimeException e) {
+            return Optional.empty();
+        }
     }
 }
