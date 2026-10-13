@@ -69,6 +69,23 @@ final class ValueParsers {
         return out;
     }
 
+    /**
+     * Amounts written as money: two decimals ("57.00") or a currency mark ("$5", "INR 57"). Phone numbers, years,
+     * ids and quantities are bare integers, so they are excluded from unlabelled guesses.
+     */
+    static List<BigDecimal> moneyAmounts(String s) {
+        List<BigDecimal> out = new ArrayList<>();
+        Matcher m = AMOUNT.matcher(DATE.matcher(s).replaceAll(" "));
+        while (m.find()) {
+            String number = m.group(1);
+            boolean currency = !m.group().strip().startsWith(number.strip());
+            if (number.matches(".*\\.\\d{2}") || currency) {
+                out.add(new BigDecimal(number.replace(",", "")));
+            }
+        }
+        return out;
+    }
+
     static Optional<LocalDate> firstDate(String s) {
         return firstDate(s, isMonthFirst(s));
     }

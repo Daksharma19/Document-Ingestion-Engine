@@ -79,6 +79,13 @@ class GenericSchemaMappingTest {
     }
 
     @Test
+    void unlabelledTotalIsNeverGuessedFromPhoneNumbersOrYears() throws Exception {
+        var f = mapper.map("RAHUL SHARMA\n+91 9868421785\nB.Tech 2023 - 2027",
+                schema("{\"total\":{\"type\":\"number\"}}")).fields();
+        assertThat(f).containsEntry("total", null);
+    }
+
+    @Test
     void blockLabelTakesTheCellBelow() throws Exception {
         var f = mapper.map("""
                 Applicant:   Reference No   APP-2291

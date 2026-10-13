@@ -77,3 +77,12 @@ ship mode via enum, order id, account no., delivery date) on 3 PDFs: 30/30 field
 Caveat: the fixes were developed while looking at these 4 documents, so 100% is an upper bound, not a held-out result.
 Frontend checked end to end in the browser: 7 mixed files (4 real PDFs, scanned PDF, PNG, DOCX), vision tier
 not-configured cards, malformed-rule error. Tests: 99 passing.
+
+## test-docs: first non-invoice document (2026-10-13)
+`test-docs/` = the 4 invoices + a real résumé (not committed; labels hand-written from the documents).
+Résumé baseline with no résumé-specific code: 70% (name, summary paragraph and bullet list missed).
+General fixes: `SectionExtractor` (text under a heading → paragraph for strings, bullets for string arrays,
+hyphenated line breaks re-joined); title-line fallback for subject-name fields (`name`, `fullName`, `candidateName`...);
+text labels need a visible separator (no "Next visit in March" false positives); unlabelled totals only from
+money-formatted amounts (no phone numbers). Result: test-docs native/auto 100% (5/5 exact), synthetic corpus unchanged,
+104 tests passing. Frontend re-checked on :5174 with the résumé schema and the invoice preset.

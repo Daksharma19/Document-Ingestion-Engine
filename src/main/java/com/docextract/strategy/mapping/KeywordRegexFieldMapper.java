@@ -38,6 +38,8 @@ public class KeywordRegexFieldMapper implements FieldMapper {
     static final double TABLE = 0.5;
     /** Found because it matches the schema's own pattern/enum/format: strong evidence, but unlabelled. */
     static final double SCHEMA_MATCH = 0.6;
+    /** Text found under a matching heading rather than after a label. */
+    static final double SECTION = 0.7;
 
     /** The "value" is really the rest of a longer label: one or two words then a colon. */
     private static final Pattern LONGER_LABEL = Pattern.compile("\\s*[A-Za-z][A-Za-z]*(?:\\s+[A-Za-z]+)?\\s*:");
@@ -62,9 +64,17 @@ public class KeywordRegexFieldMapper implements FieldMapper {
         Map<String, Object> fields = new LinkedHashMap<>();
         Map<String, Double> confidence = new LinkedHashMap<>();
         schema.path("properties").fields().forEachRemaining(e -> {
-            Optional<Found> found = "array".equals(e.getValue().path("type").asText()) && isItemTable(e.getKey(), e.getValue())
-                    ? LineItemExtractor.extract(text, e.getValue().path("items")).map(items -> new Found(items, TABLE))
-                    : findField(doc, e.getKey(), e.getValue());
+            JsonNode prop = e.getValue();
+            boolean array = "array".equals(prop.path("type").asText());
+            Optional<Found> found;
+            if (array && "string".equals(prop.path("items").path("type").asText())) {
+                // A list of strings: the bullets/lines under the matching heading.
+                found = SectionExtractor.items(doc.text(), labels(e.getKey(), prop)).map(items -> new Found(items, SECTION));
+            } else if (array && isItemTable(e.getKey(), prop)) {
+                found = LineItemExtractor.extract(text, prop.path("items")).map(items -> new Found(items, TABLE));
+            } else {
+                found = findField(doc, e.getKey(), prop);
+            }
             fields.put(e.getKey(), found.map(Found::value).orElse(null));
             confidence.put(e.getKey(), found.map(Found::confidence).orElse(0.0));
         });
@@ -89,6 +99,13 @@ public class KeywordRegexFieldMapper implements FieldMapper {
                 return Optional.of(new Found(value, LABELLED));
             }
         }
+        if (kind == Kind.STRING && !prop.has("pattern") && !prop.has("enum")) {
+            // No "Label: value" anywhere: the label may be a heading with the text underneath.
+            Optional<String> section = SectionExtractor.paragraph(doc.text(), labels(name, prop));
+            if (section.isPresent()) {
+                return section.map(v -> new Found(v, SECTION));
+            }
+        }
         Optional<Object> bySchema = schemaFallback(doc, prop, kind);
         if (bySchema.isPresent()) {
             return bySchema.map(v -> new Found(v, SCHEMA_MATCH));
@@ -105,7 +122,10 @@ public class KeywordRegexFieldMapper implements FieldMapper {
         List<String> direct = new ArrayList<>();
         List<String> indirect = new ArrayList<>();
         while (m.find()) {
-            String raw = m.group(1);
+            String raw = m.group(3);
+            if (kind == Kind.STRING && !separated(m.group(1), m.group(2))) {
+                continue; // "Next visit in March": a sentence, not a label
+            }
             if (LONGER_LABEL.matcher(raw).lookingAt()) {
                 continue; // "Total Items: 3" is a different label that merely starts with "Total".
             }
@@ -138,8 +158,17 @@ public class KeywordRegexFieldMapper implements FieldMapper {
         // Horizontal whitespace only: a label at the end of one line must not take its value from the next line.
         String words = String.join("[ \\t_-]*",
                 Arrays.stream(label.trim().split("\\s+")).map(Pattern::quote).toList());
-        return Pattern.compile("(?<![A-Za-z]|[A-Za-z]-)" + words + "(?![A-Za-z])[ \\t]*[:#-]?[ \\t]*([^\\n\\r]+)",
+        return Pattern.compile("(?<![A-Za-z]|[A-Za-z]-)(" + words + ")(?![A-Za-z])([ \\t]*[:#-]?[ \\t]*)([^\\n\\r]+)",
                 Pattern.CASE_INSENSITIVE);
+    }
+
+    /**
+     * A text value needs a visible separator from its label: ":", "#", "-", a column gap, or a label that itself
+     * ends in punctuation ("Invoice No. RE-1"). A single space reads as a sentence ("Next visit in March").
+     */
+    static boolean separated(String label, String separator) {
+        return separator.matches(".*[:#-].*") || separator.contains("\t") || separator.length() >= 2
+                || !Character.isLetter(label.charAt(label.length() - 1));
     }
 
     static Set<String> labels(String name, JsonNode prop) {
@@ -267,13 +296,16 @@ public class KeywordRegexFieldMapper implements FieldMapper {
         Optional<Object> firstDate = kind == Kind.DATE
                 ? ValueParsers.firstDate(text, doc.monthFirst()).map(d -> (Object) d.toString()) : Optional.empty();
         if (concept.isEmpty()) {
-            return Optional.empty(); // an unknown field is never guessed: absent beats wrong
+            // The document's own subject (the person on a CV/certificate, the organisation on a letterhead) is
+            // printed as its title line; any other unknown field is never guessed: absent beats wrong.
+            return kind == Kind.STRING && name.matches("(?i)(full_?|display_?)?name|(candidate|applicant|person|holder|employee|student|author|organi[sz]ation|company)_?name")
+                    ? firstNameLine(text) : Optional.empty();
         }
         return switch (concept.get()) {
             // The issue date is usually the first date printed; a due date cannot be guessed that way.
             case INVOICE_DATE -> firstDate;
             case TOTAL -> kind == Kind.NUMBER
-                    ? ValueParsers.allAmounts(text).stream().max(Comparator.naturalOrder()).map(b -> (Object) b)
+                    ? ValueParsers.moneyAmounts(text).stream().max(Comparator.naturalOrder()).map(b -> (Object) b)
                     : Optional.empty();
             case TAX -> kind == Kind.NUMBER ? taxSummary(text).map(b -> (Object) b) : Optional.empty();
             case VENDOR -> kind == Kind.STRING ? firstNameLine(text) : Optional.empty();
