@@ -57,3 +57,23 @@ They show that the pipeline and harness work end to end, nothing more.
 - Fix: a label at the end of a line no longer takes its value from the next line.
 - Checked on one real invoice (an Indian POS tax invoice; not committed). Native tier: every extracted field matches the document; subtotal is not printed as a labelled value, so it stays null. The OCR tier on the same file is noticeably worse (vendor from logo, invoice number lost, ₹ read as £).
 - Tests: 95 passing; new tests use US, EU-VAT and Indian-GST invoice texts.
+
+## Generic engine, tested on real documents (2026-10-13)
+Real set: `test-invoices/` (4 real invoices, not committed; labels hand-written from the printed documents).
+Three of them were unseen when this work started; their native-text field accuracy was 71% / 33% / 78%.
+Every fix was general (no template rules):
+- PDF text keeps column structure: wide horizontal gaps become column breaks.
+- Layout normaliser: header row over value row ("DUE DATE" over "11/12/2026") and block labels ("From:" over the name) become "Label: value".
+- Numeric date order inferred per document (10/13/2026 proves month-first).
+- Numbers directly after their label are preferred ("TOTAL $313.90" over "TOTAL DISCOUNT $0.40").
+- Line items: header row fixes column order (QTY-first or ITEM-first), wrapped rows are joined, the header yielding the most rows wins.
+- Vendor: ignores document titles, stops at the recipient block.
+- Schema-driven, domain-free fallbacks: `pattern`, `enum`, `format: email/uri`; labelled values must satisfy pattern/enum.
+- Invoice knowledge no longer leaks: only the document's own date is guessed; `customerId`/`deliveryDate` use their own labels or stay null.
+
+Result on the real set: native-text 100% field accuracy (4/4 exact); OCR tier on the same PDFs 65.6% (rendering + Tesseract
+loses logos/₹/small text). Non-invoice schema (salesperson, shipping method, terms, phone via pattern, email via format,
+ship mode via enum, order id, account no., delivery date) on 3 PDFs: 30/30 fields correct, including correct nulls.
+Caveat: the fixes were developed while looking at these 4 documents, so 100% is an upper bound, not a held-out result.
+Frontend checked end to end in the browser: 7 mixed files (4 real PDFs, scanned PDF, PNG, DOCX), vision tier
+not-configured cards, malformed-rule error. Tests: 99 passing.

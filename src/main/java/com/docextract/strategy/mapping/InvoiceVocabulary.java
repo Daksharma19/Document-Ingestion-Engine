@@ -30,7 +30,8 @@ public final class InvoiceVocabulary {
         DUE_DATE(List.of("due date", "payment due", "pay by", "due on", "due")),
         INVOICE_DATE(List.of("invoice date", "date of issue", "issue date", "issued on", "bill date", "invoice dt",
                 "dated", "date")),
-        VENDOR(List.of("sold by", "seller", "supplier", "vendor", "billed by", "merchant")),
+        // "from:" only with its colon, so prose ("from the date of purchase") does not match.
+        VENDOR(List.of("sold by", "seller", "supplier", "vendor", "billed by", "merchant", "from:")),
         CUSTOMER(List.of("bill to", "billed to", "customer name", "sold to", "ship to", "customer", "client", "buyer")),
         TAX_ID(List.of("gstin", "gst no", "vat no", "vat number", "tax id", "tin", "ein", "abn")),
         CURRENCY(List.of("currency"));
@@ -64,8 +65,16 @@ public final class InvoiceVocabulary {
         if (n.matches("(total)?(tax|vat|gst|salestax)(amount|total)?")) {
             return Optional.of(Concept.TAX);
         }
-        if (n.contains("date") || n.endsWith("dt")) {
-            return Optional.of(n.contains("due") ? Concept.DUE_DATE : Concept.INVOICE_DATE);
+        // Only the document's own date is the "invoice date"; deliveryDate, birthDate, shipDate... are other facts
+        // and are found by their own names, never guessed.
+        if (n.matches("(payment)?due(date|on|by)?|(payment|pay)(due)?(date|by)")) {
+            return Optional.of(Concept.DUE_DATE);
+        }
+        if (n.matches("(invoice|issue|bill|document|doc|receipt|purchase|transaction|order)?(date|dt|dated)|dateofissue|issuedon")) {
+            return Optional.of(Concept.INVOICE_DATE);
+        }
+        if (n.contains("date")) {
+            return Optional.empty();
         }
         if (n.contains("total") || n.contains("amountdue") || n.contains("payable") || n.contains("balancedue")
                 || n.equals("amount") || n.equals("grandtotal")) {
@@ -76,6 +85,10 @@ public final class InvoiceVocabulary {
         }
         if (n.matches("(invoice|inv|bill|receipt|document)(number|no|num|id)?") || n.matches("(number|no)")) {
             return Optional.of(Concept.INVOICE_NUMBER);
+        }
+        // A party's id/number/phone/address is not the party's name: leave those to their own labels.
+        if (n.matches(".*(id|number|no|num|code|phone|email|address|gstin|vat|tax)$")) {
+            return Optional.empty();
         }
         if (n.matches(".*(vendor|seller|supplier|merchant|company|issuer|store|biller|shop).*")) {
             return Optional.of(Concept.VENDOR);

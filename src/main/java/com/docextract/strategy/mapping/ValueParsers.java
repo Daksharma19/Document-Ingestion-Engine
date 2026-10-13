@@ -70,9 +70,13 @@ final class ValueParsers {
     }
 
     static Optional<LocalDate> firstDate(String s) {
+        return firstDate(s, isMonthFirst(s));
+    }
+
+    static Optional<LocalDate> firstDate(String s, boolean monthFirst) {
         Matcher m = DATE.matcher(s);
         while (m.find()) {
-            Optional<LocalDate> d = parseDate(m.group(1));
+            Optional<LocalDate> d = parseDate(m.group(1), monthFirst);
             if (d.isPresent()) {
                 return d;
             }
@@ -82,10 +86,36 @@ final class ValueParsers {
 
     private static final Pattern YEAR_FIRST = Pattern.compile("(\\d{4})[-/.](\\d{1,2})[-/.](\\d{1,2})");
     private static final Pattern DAY_FIRST = Pattern.compile("(\\d{1,2})[-/.](\\d{1,2})[-/.](\\d{2}|\\d{4})");
+    private static final Pattern NUMERIC_DATE = Pattern.compile("(?<![\\d/.-])(\\d{1,2})[-/.](\\d{1,2})[-/.](?:\\d{4}|\\d{2})(?![\\d/.-])");
+
+    /**
+     * Whether this document writes numeric dates month-first (US). Decided from evidence in the document itself:
+     * any date whose second part exceeds 12 (10/13/2026) proves month-first; one whose first part exceeds 12
+     * (28-09-2026) proves day-first. With no evidence, day-first is assumed.
+     */
+    static boolean isMonthFirst(String text) {
+        Matcher m = NUMERIC_DATE.matcher(text);
+        boolean monthFirstEvidence = false;
+        while (m.find()) {
+            int a = Integer.parseInt(m.group(1));
+            int b = Integer.parseInt(m.group(2));
+            if (a > 12 && b <= 12) {
+                return false;
+            }
+            if (b > 12 && a <= 12) {
+                monthFirstEvidence = true;
+            }
+        }
+        return monthFirstEvidence;
+    }
 
     static Optional<LocalDate> parseDate(String raw) {
+        return parseDate(raw, false);
+    }
+
+    static Optional<LocalDate> parseDate(String raw, boolean monthFirst) {
         String t = raw.trim();
-        // All-numeric dates: normalise any separator; year-first is unambiguous, otherwise day-first.
+        // All-numeric dates: normalise any separator; year-first is unambiguous, otherwise the document's order.
         Matcher m = YEAR_FIRST.matcher(t);
         if (m.matches()) {
             return safeDate(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)), Integer.parseInt(m.group(3)));
@@ -93,7 +123,9 @@ final class ValueParsers {
         m = DAY_FIRST.matcher(t);
         if (m.matches()) {
             int year = Integer.parseInt(m.group(3));
-            return safeDate(year < 100 ? 2000 + year : year, Integer.parseInt(m.group(2)), Integer.parseInt(m.group(1)));
+            int first = Integer.parseInt(m.group(1));
+            int second = Integer.parseInt(m.group(2));
+            return safeDate(year < 100 ? 2000 + year : year, monthFirst ? first : second, monthFirst ? second : first);
         }
         String cleaned = t.replaceAll("(?i)(\\d)(st|nd|rd|th)\\b", "$1").replace("-", " ")
                 .replace(",", "").replace(".", "").replaceAll("\\s+", " ").trim();

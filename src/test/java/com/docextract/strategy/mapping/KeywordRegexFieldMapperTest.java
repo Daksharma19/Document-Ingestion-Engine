@@ -56,10 +56,13 @@ class KeywordRegexFieldMapperTest {
     @Test
     void fallsBackWithLowConfidenceWhenUnlabelled() throws Exception {
         var result = mapper.map("Paid on 2024-01-05, amounts 10.00 and 99.99",
-                schema("{\"paidDate\":{\"type\":\"string\",\"format\":\"date\"},\"amountDue\":{\"type\":\"number\"}}"));
-        assertThat(result.fields()).containsEntry("paidDate", "2024-01-05")
-                .containsEntry("amountDue", new BigDecimal("99.99"));
-        assertThat(result.confidence().get("paidDate")).isEqualTo(KeywordRegexFieldMapper.FALLBACK);
+                schema("{\"invoiceDate\":{\"type\":\"string\",\"format\":\"date\"},\"amountDue\":{\"type\":\"number\"},"
+                        + "\"deliveryDate\":{\"type\":\"string\",\"format\":\"date\"}}"));
+        assertThat(result.fields()).containsEntry("invoiceDate", "2024-01-05")
+                .containsEntry("amountDue", new BigDecimal("99.99"))
+                // Not the document's own date and not labelled: absent, never guessed.
+                .containsEntry("deliveryDate", null);
+        assertThat(result.confidence().get("invoiceDate")).isEqualTo(KeywordRegexFieldMapper.FALLBACK);
     }
 
     @Test

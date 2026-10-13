@@ -46,9 +46,49 @@ public class TextExtractor {
 
     private String pdfText(Document document) throws Exception {
         try (PDDocument pdf = Loader.loadPDF(document.bytes())) {
-            PDFTextStripper stripper = new PDFTextStripper();
+            PDFTextStripper stripper = new ColumnGapStripper();
             stripper.setSortByPosition(true);
             return stripper.getText(pdf);
+        }
+    }
+
+    /**
+     * PDFBox joins everything on one baseline with single spaces, so two side-by-side columns
+     * ("INVOICE # 54167" | "PHONE NUMBER 916-555-0123") read as one sentence. This stripper writes a wide
+     * horizontal gap (more than ~2 character widths) as three spaces, which downstream code treats as a column break.
+     */
+    static final class ColumnGapStripper extends PDFTextStripper {
+        static final String COLUMN_GAP = "   ";
+        private float lastEndX = Float.NaN;
+
+        ColumnGapStripper() throws java.io.IOException {
+            super();
+        }
+
+        @Override
+        protected void writeString(String text, java.util.List<org.apache.pdfbox.text.TextPosition> positions) throws java.io.IOException {
+            if (!positions.isEmpty()) {
+                org.apache.pdfbox.text.TextPosition first = positions.getFirst();
+                float charWidth = Math.max(first.getWidthOfSpace(), first.getWidth());
+                if (!Float.isNaN(lastEndX) && charWidth > 0 && first.getXDirAdj() - lastEndX > 2.5f * charWidth) {
+                    writeString(COLUMN_GAP);
+                }
+                org.apache.pdfbox.text.TextPosition last = positions.getLast();
+                lastEndX = last.getXDirAdj() + last.getWidthDirAdj();
+            }
+            super.writeString(text, positions);
+        }
+
+        @Override
+        protected void writeLineSeparator() throws java.io.IOException {
+            lastEndX = Float.NaN;
+            super.writeLineSeparator();
+        }
+
+        @Override
+        protected void startPage(org.apache.pdfbox.pdmodel.PDPage page) throws java.io.IOException {
+            lastEndX = Float.NaN;
+            super.startPage(page);
         }
     }
 }
