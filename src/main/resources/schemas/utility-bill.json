@@ -1,0 +1,112 @@
+{
+  "id": "utility-bill",
+  "label": "Utility bill",
+  "category": "Bills",
+  "description": "Electricity, water, gas, phone or internet bills: account, period, usage and amount due.",
+  "keywords": [
+    "electricity",
+    "consumer",
+    "units",
+    "kwh",
+    "meter",
+    "billing period",
+    "due date",
+    "tariff",
+    "broadband",
+    "water",
+    "gas",
+    "connection"
+  ],
+  "rules": [
+    "dueDate >= billDate"
+  ],
+  "schema": {
+    "type": "object",
+    "required": [
+      "amountDue"
+    ],
+    "properties": {
+      "provider": {
+        "type": "string"
+      },
+      "customerName": {
+        "type": "string",
+        "x-labels": [
+          "Consumer Name",
+          "Customer Name",
+          "Name",
+          "Bill To"
+        ]
+      },
+      "accountNumber": {
+        "type": "string",
+        "x-labels": [
+          "Account No",
+          "Consumer No",
+          "Customer ID",
+          "CA No",
+          "Connection No",
+          "Service No"
+        ]
+      },
+      "billNumber": {
+        "type": "string"
+      },
+      "billDate": {
+        "type": "string",
+        "format": "date"
+      },
+      "dueDate": {
+        "type": "string",
+        "format": "date"
+      },
+      "billingPeriod": {
+        "type": "string",
+        "x-labels": [
+          "Billing Period",
+          "Bill Period",
+          "Period",
+          "Billing Cycle"
+        ]
+      },
+      "unitsConsumed": {
+        "type": "number",
+        "x-labels": [
+          "Units Consumed",
+          "Consumption",
+          "Total Units",
+          "Units",
+          "Usage"
+        ]
+      },
+      "previousBalance": {
+        "type": "number",
+        "x-labels": [
+          "Previous Balance",
+          "Arrears",
+          "Previous Dues"
+        ]
+      },
+      "currentCharges": {
+        "type": "number",
+        "x-labels": [
+          "Current Charges",
+          "Current Bill",
+          "Bill Amount",
+          "Energy Charges"
+        ]
+      },
+      "amountDue": {
+        "type": "number",
+        "x-labels": [
+          "Amount Due",
+          "Total Amount Due",
+          "Net Payable",
+          "Amount Payable",
+          "Total Due"
+        ]
+      }
+    }
+  },
+  "order": 9
+}

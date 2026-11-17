@@ -1,0 +1,144 @@
+{
+  "id": "purchase-order",
+  "label": "Purchase order",
+  "category": "Finance",
+  "description": "PO number, buyer and supplier, delivery date, terms and ordered lines.",
+  "keywords": [
+    "purchase order",
+    "p.o.",
+    "po number",
+    "po no",
+    "ship to",
+    "delivery date",
+    "order date",
+    "required by"
+  ],
+  "rules": [
+    "deliveryDate >= orderDate"
+  ],
+  "schema": {
+    "type": "object",
+    "required": [
+      "poNumber"
+    ],
+    "properties": {
+      "buyer": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "x-labels": [
+          "Buyer",
+          "Purchaser",
+          "Bill To"
+        ]
+      },
+      "supplier": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "x-labels": [
+          "Vendor",
+          "Supplier",
+          "Seller"
+        ]
+      },
+      "poNumber": {
+        "type": "string",
+        "x-labels": [
+          "PO Number",
+          "PO No",
+          "P.O. No",
+          "PO #",
+          "Purchase Order No"
+        ]
+      },
+      "orderDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "PO Date",
+          "Order Date",
+          "Date"
+        ]
+      },
+      "deliveryDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Delivery Date",
+          "Required By",
+          "Ship Date",
+          "Expected Delivery"
+        ]
+      },
+      "shipTo": {
+        "type": "string",
+        "x-labels": [
+          "Ship To",
+          "Deliver To",
+          "Delivery Address"
+        ]
+      },
+      "paymentTerms": {
+        "type": "string",
+        "x-labels": [
+          "Payment Terms",
+          "Terms"
+        ]
+      },
+      "shippingMethod": {
+        "type": "string",
+        "x-labels": [
+          "Shipping Method",
+          "Ship Via",
+          "Mode of Delivery"
+        ]
+      },
+      "currency": {
+        "type": "string"
+      },
+      "subtotal": {
+        "type": "number"
+      },
+      "tax": {
+        "type": "number"
+      },
+      "total": {
+        "type": "number"
+      },
+      "lineItems": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number"
+            },
+            "unitPrice": {
+              "type": "number"
+            },
+            "amount": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  },
+  "order": 4
+}

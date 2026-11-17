@@ -1,0 +1,123 @@
+{
+  "id": "invoice-detailed",
+  "label": "Invoice (detailed)",
+  "category": "Finance",
+  "description": "Seller and buyer blocks, dates, currency, discount, shipping, totals and every line item.",
+  "keywords": [
+    "invoice",
+    "bill to",
+    "ship to",
+    "invoice no",
+    "due date",
+    "amount due",
+    "qty",
+    "unit price"
+  ],
+  "rules": [
+    "dueDate >= invoiceDate"
+  ],
+  "schema": {
+    "type": "object",
+    "required": [
+      "invoiceNumber",
+      "total"
+    ],
+    "properties": {
+      "vendor": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "taxId": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "customer": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "x-labels": [
+          "Bill To",
+          "Billed To",
+          "Sold To"
+        ]
+      },
+      "invoiceNumber": {
+        "type": "string"
+      },
+      "orderNumber": {
+        "type": "string"
+      },
+      "invoiceDate": {
+        "type": "string",
+        "format": "date"
+      },
+      "dueDate": {
+        "type": "string",
+        "format": "date"
+      },
+      "currency": {
+        "type": "string"
+      },
+      "subtotal": {
+        "type": "number"
+      },
+      "discount": {
+        "type": "number"
+      },
+      "tax": {
+        "type": "number"
+      },
+      "shipping": {
+        "type": "number",
+        "x-labels": [
+          "Shipping",
+          "Freight",
+          "Delivery Charges",
+          "Shipping & Handling"
+        ]
+      },
+      "total": {
+        "type": "number"
+      },
+      "lineItems": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number"
+            },
+            "unitPrice": {
+              "type": "number"
+            },
+            "amount": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  },
+  "order": 1
+}

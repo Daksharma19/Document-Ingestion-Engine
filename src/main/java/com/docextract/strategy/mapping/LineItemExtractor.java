@@ -25,24 +25,31 @@ import java.util.regex.Pattern;
  *       A row with only tax noise before its numbers (POS slips) takes its name from the nearest line above.</li>
  * </ol>
  * Columns are mapped onto the item schema's properties by name.
+ * <p>Statement tables (bank/card statements, ledgers) work the same way: DATE columns are read as dates, and
+ * DEBIT / CREDIT / BALANCE columns as amounts. Plain text loses which column a lone amount sat in, so when a row has
+ * one amount plus the running balance, the balance change decides: previous balance - amount = balance means a debit.
  */
 public final class LineItemExtractor {
 
     private LineItemExtractor() {
     }
 
-    enum Role { DESCRIPTION, QUANTITY, UNIT_PRICE, AMOUNT, CODE, DISCOUNT, TAX }
+    enum Role { DESCRIPTION, QUANTITY, UNIT_PRICE, AMOUNT, CODE, DISCOUNT, TAX, DATE, DEBIT, CREDIT, BALANCE }
 
     // Longer phrases first so "unit price" is one PRICE column, "item #" a CODE, "line total" one AMOUNT.
     private static final Pattern COLUMN = Pattern.compile(
             "(?i)(?<![A-Za-z])(?:"
-                    + "(?<code>item\\s*#|item\\s*no\\.?|item\\s*code|sku|hsn(?:/sac)?|sac|part\\s*(?:no|#))"
+                    + "(?<date>(?:txn\\s*|tran(?:saction)?\\s*|value\\s*|posting\\s*|post\\s*)?(?:date|dt\\.?))"
+                    + "|(?<debit>withdrawals?(?:\\s*(?:amt|amount)\\.?)?|debits?(?:\\s*(?:amt|amount)\\.?)?|dr\\.?(?=\\s|$))"
+                    + "|(?<credit>deposits?(?:\\s*(?:amt|amount)\\.?)?|credits?(?:\\s*(?:amt|amount)\\.?)?|cr\\.?(?=\\s|$))"
+                    + "|(?<balance>(?:closing\\s*|running\\s*|available\\s*)?balance|bal\\.?(?=\\s|$))"
+                    + "|(?<code>item\\s*#|item\\s*no\\.?|item\\s*code|sku|hsn(?:/sac)?|sac|part\\s*(?:no|#)|chq\\.?\\s*(?:/\\s*ref\\.?\\s*)?no\\.?|cheque\\s*no\\.?|ref(?:erence)?\\.?\\s*no\\.?)"
                     + "|(?<qty>hrs/qty|qty|quantity|hours|hrs|nos)"
                     + "|(?<price>unit\\s*price|unit\\s*cost|rate/price|price/rate|rate|price|mrp)"
                     + "|(?<disc>discount|disc\\.?|adjust(?:ment)?)"
                     + "|(?<tax>tax|gst|vat)"
                     + "|(?<amount>line\\s*total|sub\\s*total|amount|amt|total|net)"
-                    + "|(?<desc>description|item\\s*name|items?|services?|products?|particulars|details)"
+                    + "|(?<desc>description|item\\s*name|items?|services?|products?|particulars|narration|transaction\\s*details|details|remarks)"
                     + ")(?![A-Za-z])");
     private static final Pattern SUMMARY_START = Pattern.compile(
             "(?i)^\\s*(sub\\s*-?\\s*total|total|grand\\s+total|net\\s+(amount|total|payable)|amount\\s+(payable|due)|"
@@ -58,7 +65,11 @@ public final class LineItemExtractor {
         List<Role> roles = new ArrayList<>();
         Matcher m = COLUMN.matcher(line);
         while (m.find()) {
-            roles.add(m.group("code") != null ? Role.CODE
+            roles.add(m.group("date") != null ? Role.DATE
+                    : m.group("debit") != null ? Role.DEBIT
+                    : m.group("credit") != null ? Role.CREDIT
+                    : m.group("balance") != null ? Role.BALANCE
+                    : m.group("code") != null ? Role.CODE
                     : m.group("qty") != null ? Role.QUANTITY
                     : m.group("price") != null ? Role.UNIT_PRICE
                     : m.group("disc") != null ? Role.DISCOUNT
@@ -75,7 +86,8 @@ public final class LineItemExtractor {
         if (line.contains(":") || line.matches(".*\\d.*")) {
             return false;
         }
-        return roles.size() >= 2 && roles.stream().anyMatch(r -> r == Role.QUANTITY || r == Role.UNIT_PRICE || r == Role.AMOUNT)
+        return roles.size() >= 2 && roles.stream().anyMatch(r -> r == Role.QUANTITY || r == Role.UNIT_PRICE || r == Role.AMOUNT
+                || r == Role.DEBIT || r == Role.CREDIT || r == Role.BALANCE)
                 && !MONEY.matcher(line.trim() + " ").find();
     }
 
@@ -86,6 +98,7 @@ public final class LineItemExtractor {
      */
     public static Optional<List<Map<String, Object>>> extract(String text, JsonNode itemSchema) {
         String[] lines = text.split("\\R");
+        boolean monthFirst = ValueParsers.isMonthFirst(text);
         List<Map<String, Object>> best = List.of();
         int bestRoles = -1;
         List<Integer> candidates = new ArrayList<>();
@@ -95,7 +108,7 @@ public final class LineItemExtractor {
             }
         }
         for (int header : candidates) {
-            List<Map<String, Object>> rows = extract(lines, header, itemSchema);
+            List<Map<String, Object>> rows = extract(lines, header, itemSchema, monthFirst);
             int roles = header >= 0 ? headerRoles(lines[header]).size() : 0;
             if (rows.size() > best.size() || rows.size() == best.size() && !rows.isEmpty() && roles > bestRoles) {
                 best = rows;
@@ -104,16 +117,21 @@ public final class LineItemExtractor {
         }
         if (best.isEmpty()) {
             // No header produced rows: fall back to the header-less reading (receipts without column captions).
-            best = extract(lines, -1, itemSchema);
+            best = extract(lines, -1, itemSchema, monthFirst);
         }
         return best.isEmpty() ? Optional.empty() : Optional.of(best);
     }
 
-    private static List<Map<String, Object>> extract(String[] lines, int header, JsonNode itemSchema) {
+    private static List<Map<String, Object>> extract(String[] lines, int header, JsonNode itemSchema, boolean monthFirst) {
         List<Role> roles = header >= 0 ? headerRoles(lines[header]) : List.of();
         int descAt = roles.indexOf(Role.DESCRIPTION);
-        List<Role> leading = descAt > 0 ? roles.subList(0, descAt) : List.of();
-        List<Role> trailing = descAt >= 0 ? roles.subList(descAt + 1, roles.size()) : roles;
+        // Dates are not numbers: a leading DATE column is read separately, a trailing one (value date) is skipped.
+        boolean leadingDate = descAt > 0 && roles.get(0) == Role.DATE;
+        List<Role> leading = descAt > 0 ? roles.subList(leadingDate ? 1 : 0, descAt) : List.of();
+        List<Role> trailing = (descAt >= 0 ? roles.subList(descAt + 1, roles.size()) : roles).stream()
+                .filter(r -> r != Role.DATE).toList();
+        boolean statement = roles.contains(Role.BALANCE) || roles.contains(Role.DEBIT) || roles.contains(Role.CREDIT);
+        BigDecimal balance = null;
 
         List<Row> rows = new ArrayList<>();
         int lastUsed = header;
@@ -123,11 +141,34 @@ public final class LineItemExtractor {
             if (line.isEmpty()) {
                 continue;
             }
+            String date = null;
+            if (leadingDate) {
+                Matcher dm = ValueParsers.DATE.matcher(line);
+                if (!dm.lookingAt()) {
+                    // Statement rows start with their date; an undated "Opening Balance 10,000.00" sets the start.
+                    if (line.matches("(?i).*(opening|brought\s+forward|b/f|balance\s+forward).*")) {
+                        List<BigDecimal> amounts = ValueParsers.allAmounts(line);
+                        balance = amounts.isEmpty() ? balance : amounts.getLast();
+                    }
+                    continue;
+                }
+                date = ValueParsers.parseDate(dm.group(1), monthFirst).map(Object::toString).orElse(null);
+                line = line.substring(dm.end()).trim();
+            }
             List<String> tokens = new ArrayList<>(Arrays.asList(line.split("\\s+")));
             List<BigDecimal> tail = new ArrayList<>();
             int tailLimit = trailing.isEmpty() ? Integer.MAX_VALUE : trailing.size();
-            while (!tokens.isEmpty() && tail.size() < tailLimit && NUMBER.matcher(tokens.getLast()).matches()) {
-                tail.addFirst(parse(tokens.removeLast()));
+            while (!tokens.isEmpty() && tail.size() < tailLimit) {
+                String last = tokens.getLast();
+                if (NUMBER.matcher(last).matches()) {
+                    tail.addFirst(parse(tokens.removeLast()));
+                } else if (statement && last.matches("(?i)cr\\.?|dr\\.?") && !tail.isEmpty()) {
+                    tokens.removeLast(); // "12,000.00 Cr": the balance's sign marker
+                } else if (statement && ValueParsers.DATE.matcher(last).matches()) {
+                    tokens.removeLast(); // value-date column
+                } else {
+                    break;
+                }
             }
             if (SUMMARY_START.matcher(line).lookingAt() && !tail.isEmpty()) {
                 break;
@@ -137,6 +178,10 @@ public final class LineItemExtractor {
                 head.add(parse(tokens.removeFirst()));
             }
             String desc = String.join(" ", tokens).trim();
+            if (statement && desc.matches("(?i).*(opening|brought\\s+forward|b/f|balance\\s+forward).*") && !tail.isEmpty()) {
+                balance = tail.getLast(); // the starting balance, not a transaction
+                continue;
+            }
 
             boolean hasAmount = !tail.isEmpty() && (MONEY.matcher(line).find() || header >= 0 && tail.size() >= 2);
             if (!hasAmount) {
@@ -145,7 +190,7 @@ public final class LineItemExtractor {
                     if (head.isEmpty() && !tail.isEmpty()) {
                         head.addAll(tail);
                     }
-                    pending = new Row(desc, head, List.of());
+                    pending = new Row(desc, head, List.of(), date, null);
                 }
                 continue;
             }
@@ -154,7 +199,7 @@ public final class LineItemExtractor {
                 continue; // "HSN/SAC: 996331", "Phone: 123" are labels, not rows
             }
             if (pending != null && head.isEmpty()) {
-                rows.add(new Row(pending.description(), pending.head(), tail));
+                rows.add(new Row(pending.description(), pending.head(), tail, date, null));
                 pending = null;
                 lastUsed = i;
                 continue;
@@ -167,7 +212,23 @@ public final class LineItemExtractor {
                 }
                 desc = lines[found].trim();
             }
-            rows.add(new Row(desc, head, tail));
+            if (statement && roles.contains(Role.BALANCE) && roles.contains(Role.DEBIT) && roles.contains(Role.CREDIT)
+                    && tail.size() == 2) {
+                // One amount + balance: which of debit/credit it was follows from how the balance moved.
+                BigDecimal amount = tail.get(0);
+                BigDecimal newBalance = tail.get(1);
+                boolean credit = balance != null
+                        ? balance.add(amount).subtract(newBalance).abs().compareTo(new BigDecimal("0.01")) <= 0
+                        : CREDIT_WORDS.matcher(desc).find();
+                rows.add(new Row(desc, head, tail, date, credit ? Role.CREDIT : Role.DEBIT));
+                balance = newBalance;
+                lastUsed = i;
+                continue;
+            }
+            if (statement && !tail.isEmpty() && roles.contains(Role.BALANCE)) {
+                balance = tail.getLast();
+            }
+            rows.add(new Row(desc, head, tail, date, null));
             lastUsed = i;
         }
         if (rows.isEmpty()) {
@@ -181,8 +242,12 @@ public final class LineItemExtractor {
         return out;
     }
 
-    private record Row(String description, List<BigDecimal> head, List<BigDecimal> tail) {
+    /** @param side for a statement row with a single amount: DEBIT or CREDIT, decided from the balance */
+    private record Row(String description, List<BigDecimal> head, List<BigDecimal> tail, String date, Role side) {
     }
+
+    private static final Pattern CREDIT_WORDS = Pattern.compile(
+            "(?i)\\b(salary|credit(ed)?|deposit|refund|interest|cashback|reversal|received|by\\s+transfer|neft\\s+cr|imps\\s+cr|cr)\\b");
 
 
     /** Nearest line above (after the previous row) that reads like a product name, not a code or label. */
@@ -199,7 +264,10 @@ public final class LineItemExtractor {
     private static Map<String, Object> toItem(Row r, List<Role> leading, List<Role> trailing, boolean hasHeader,
                                               Map<String, Role> columns, JsonNode itemSchema) {
         Map<Role, BigDecimal> values = new LinkedHashMap<>();
-        if (hasHeader && !trailing.isEmpty()) {
+        if (r.side() != null) {
+            values.put(r.side(), r.tail().get(0));
+            values.put(Role.BALANCE, r.tail().get(1));
+        } else if (hasHeader && !trailing.isEmpty()) {
             for (int k = 0; k < r.head().size() && k < leading.size(); k++) {
                 values.putIfAbsent(leading.get(k), r.head().get(k));
             }
@@ -224,7 +292,8 @@ public final class LineItemExtractor {
         }
         Map<String, Object> item = new LinkedHashMap<>();
         for (Map.Entry<String, Role> c : columns.entrySet()) {
-            Object v = c.getValue() == Role.DESCRIPTION ? r.description() : values.get(c.getValue());
+            Object v = c.getValue() == Role.DESCRIPTION ? r.description()
+                    : c.getValue() == Role.DATE ? r.date() : values.get(c.getValue());
             if (v instanceof BigDecimal b && "integer".equals(itemSchema.path("properties").path(c.getKey()).path("type").asText())) {
                 v = b.intValue();
             }
@@ -248,7 +317,11 @@ public final class LineItemExtractor {
         }
         props.fieldNames().forEachRemaining(name -> {
             String n = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
-            Role role = n.matches(".*(sku|code|hsn|partno|itemno).*") ? Role.CODE
+            Role role = n.matches(".*(date|dt)$|^(date|txndate|valuedate).*") ? Role.DATE
+                    : n.matches(".*(debit|withdrawal).*") ? Role.DEBIT
+                    : n.matches(".*(credit|deposit).*") ? Role.CREDIT
+                    : n.matches(".*balance.*") ? Role.BALANCE
+                    : n.matches(".*(sku|code|hsn|partno|itemno|ref|reference|chq|cheque).*") ? Role.CODE
                     : n.matches(".*(desc|name|item|product|particular|title|service|detail).*") ? Role.DESCRIPTION
                     : n.matches("(qty|quantity|units?|count|nos|hours|hrs)") ? Role.QUANTITY
                     : n.matches(".*(unitprice|unitcost|price|rate|mrp).*") ? Role.UNIT_PRICE

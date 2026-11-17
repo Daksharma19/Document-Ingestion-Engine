@@ -1,0 +1,105 @@
+{
+  "id": "receipt",
+  "label": "Receipt",
+  "category": "Finance",
+  "description": "Store receipts and POS slips: merchant, date and time, payment method, items and totals.",
+  "keywords": [
+    "receipt",
+    "cashier",
+    "change",
+    "tender",
+    "thank you",
+    "pos",
+    "store",
+    "total"
+  ],
+  "rules": [],
+  "schema": {
+    "type": "object",
+    "required": [
+      "total"
+    ],
+    "properties": {
+      "merchant": {
+        "type": "string"
+      },
+      "merchantAddress": {
+        "type": "string",
+        "x-labels": [
+          "Address"
+        ]
+      },
+      "merchantPhone": {
+        "type": "string"
+      },
+      "receiptNumber": {
+        "type": "string",
+        "x-labels": [
+          "Receipt No",
+          "Bill No",
+          "Invoice No",
+          "Txn No",
+          "Transaction No"
+        ]
+      },
+      "date": {
+        "type": "string",
+        "format": "date"
+      },
+      "time": {
+        "type": "string"
+      },
+      "paymentMethod": {
+        "type": "string",
+        "enum": [
+          "Cash",
+          "Credit Card",
+          "Debit Card",
+          "Card",
+          "UPI",
+          "Cheque",
+          "Wallet",
+          "Online"
+        ]
+      },
+      "currency": {
+        "type": "string"
+      },
+      "subtotal": {
+        "type": "number"
+      },
+      "tax": {
+        "type": "number"
+      },
+      "tip": {
+        "type": "number",
+        "x-labels": [
+          "Tip",
+          "Gratuity",
+          "Service Charge"
+        ]
+      },
+      "total": {
+        "type": "number"
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number"
+            },
+            "amount": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  },
+  "order": 3
+}

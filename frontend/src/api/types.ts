@@ -29,7 +29,15 @@ export interface FileExtractionResult {
   tier?: string;
   strategy?: string;
   routing?: string;
+  /** What read the document inside the tier, e.g. "rapidocr-ppocr" or "tesseract" for OCR. */
+  engine?: string;
+  /** The built-in schema used (schema sent as an id, or "auto"). */
+  schemaId?: string;
+  /** With schema "auto": the document type the classifier picked. */
+  documentType?: string;
   costUnits: number;
+  /** Server-side wall-clock time for this file, in milliseconds. */
+  elapsedMs?: number;
   fields?: Record<string, unknown>;
   confidence?: Record<string, number>;
   fieldValidation?: Record<string, boolean>;
@@ -40,8 +48,20 @@ export interface FileExtractionResult {
   text?: string;
 }
 
+/** A built-in schema from GET /api/schemas (com.docextract.schema.SchemaCatalog.SchemaPreset). */
+export interface SchemaPreset {
+  id: string;
+  label: string;
+  category: string;
+  description: string;
+  keywords: string[];
+  rules: string[];
+  schema: object;
+}
+
 export interface ExtractRequest {
   files: File[];
+  /** JSON Schema text, a built-in schema id, or "auto". */
   schema: string;
   rules?: string;
   tier: Tier;

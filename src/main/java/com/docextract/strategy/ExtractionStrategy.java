@@ -23,6 +23,14 @@ public interface ExtractionStrategy {
         return true;
     }
 
+    /**
+     * Maps an earlier result's text onto another schema without reading the document again (used when the schema
+     * is chosen after seeing the text). Empty when the tier cannot (the vision tier has no reusable text).
+     */
+    default Optional<ExtractionResult> remap(ExtractionResult previous, JsonNode schema) {
+        return Optional.empty();
+    }
+
     /** Empty when the tier is ready; otherwise why not (missing API key, missing OCR data, ...). */
     default Optional<String> notConfiguredReason() {
         return Optional.empty();

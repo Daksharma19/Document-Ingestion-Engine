@@ -15,7 +15,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "docextract.vision.api-key=")
+// No OCR service URL: the OCR tier uses in-process Tesseract, so results do not depend on a running ocr-service.
+@SpringBootTest(properties = {"docextract.vision.api-key=", "docextract.ocr.service-url="})
 @AutoConfigureMockMvc
 class DocextractApplicationTests {
 
@@ -106,5 +107,69 @@ class DocextractApplicationTests {
         var file = new MockMultipartFile("files", "a.txt", "text/plain", "x".getBytes());
         mvc.perform(multipart("/api/extract").file(file).param("schema", TOTAL_SCHEMA).param("tier", "magic"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void builtInSchemasAreListed() throws Exception {
+        mvc.perform(get("/api/schemas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("invoice"))
+                .andExpect(jsonPath("$[?(@.id == 'bank-statement')].schema.properties.transactions").exists());
+        mvc.perform(get("/api/schemas/nope")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void schemaCanBeABuiltInIdWithItsDefaultRules() throws Exception {
+        byte[] pdf = Files.readAllBytes(Path.of("corpus/invoice-001.pdf"));
+        mvc.perform(multipart("/api/extract")
+                        .file(new MockMultipartFile("files", "invoice-001.pdf", "application/pdf", pdf))
+                        .param("schema", "invoice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].schemaId").value("invoice"))
+                .andExpect(jsonPath("$[0].fields.invoiceNumber").value("INV-2024-001"))
+                .andExpect(jsonPath("$[0].rules[0].expression").value("subtotal + tax == total"))
+                .andExpect(jsonPath("$[0].rules[0].outcome").value("PASSED"));
+    }
+
+    @Test
+    void autoSchemaClassifiesEachDocument() throws Exception {
+        var slip = new MockMultipartFile("files", "slip.txt", "text/plain", """
+                ACME CORP - SALARY SLIP
+                Employee Name: Ravi Kumar
+                Employee ID: E-102
+                Gross Earnings: 85,000.00
+                Total Deductions: 12,400.00
+                Net Pay: 72,600.00
+                """.getBytes());
+        mvc.perform(multipart("/api/extract").file(slip).param("schema", "auto"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].schemaId").value("payslip"))
+                .andExpect(jsonPath("$[0].documentType").value("Payslip"))
+                .andExpect(jsonPath("$[0].fields.employeeName").value("Ravi Kumar"))
+                .andExpect(jsonPath("$[0].fields.netPay").value(72600.00))
+                .andExpect(jsonPath("$[0].rules[0].outcome").value("PASSED"));
+    }
+
+    @Test
+    void unknownSchemaIdIs400() throws Exception {
+        var file = new MockMultipartFile("files", "a.txt", "text/plain", "x".getBytes());
+        mvc.perform(multipart("/api/extract").file(file).param("schema", "tax-return-2049"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void weakNativeResultEscalatesToOcrAndKeepsTheBetterOne() throws Exception {
+        byte[] pdf = Files.readAllBytes(Path.of("corpus/invoice-001.pdf"));
+        String schema = """
+                {"type":"object","required":["total","purchaseOrderRef"],
+                 "properties":{"total":{"type":"number"},"purchaseOrderRef":{"type":"string"}}}""";
+        mvc.perform(multipart("/api/extract")
+                        .file(new MockMultipartFile("files", "invoice-001.pdf", "application/pdf", pdf))
+                        .param("schema", schema))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("OK"))
+                .andExpect(jsonPath("$[0].routing").value(org.hamcrest.Matchers.containsString("escalated to ocr")))
+                .andExpect(jsonPath("$[0].costUnits").value(21))
+                .andExpect(jsonPath("$[0].fields.total").value(165.20));
     }
 }

@@ -1,0 +1,55 @@
+{
+  "id": "generic",
+  "label": "Any document (key facts)",
+  "category": "General",
+  "description": "Contact details, the main date, a reference number and the total, from any document.",
+  "keywords": [],
+  "rules": [],
+  "schema": {
+    "type": "object",
+    "properties": {
+      "organizationName": {
+        "type": "string",
+        "x-labels": [
+          "Company",
+          "Organization",
+          "From"
+        ]
+      },
+      "date": {
+        "type": "string",
+        "format": "date"
+      },
+      "referenceNumber": {
+        "type": "string",
+        "x-labels": [
+          "Reference No",
+          "Ref No",
+          "Ref",
+          "Number",
+          "No"
+        ]
+      },
+      "email": {
+        "type": "string"
+      },
+      "phone": {
+        "type": "string"
+      },
+      "website": {
+        "type": "string"
+      },
+      "address": {
+        "type": "string",
+        "x-labels": [
+          "Address",
+          "Registered Address"
+        ]
+      },
+      "total": {
+        "type": "number"
+      }
+    }
+  },
+  "order": 14
+}

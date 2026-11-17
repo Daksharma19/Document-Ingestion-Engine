@@ -73,13 +73,33 @@ class ValidationEngineTest {
 
     @Test
     void lineItemsNotSummingToTotalIsReported() throws Exception {
+        // With a tax figure the sum must match exactly.
         var report = validate("""
-                {"invoiceNumber":"X","total":100,"lineItems":[{"amount":60},{"amount":30}]}""");
+                {"invoiceNumber":"X","total":100,"tax":5,"lineItems":[{"amount":60},{"amount":30}]}""");
         assertThat(report.violations()).singleElement().satisfies(v -> {
             assertThat(v.rule()).isEqualTo("line-items-sum");
             assertThat(v.field()).isEqualTo("total");
-            assertThat(v.message()).contains("90").contains("100");
+            assertThat(v.message()).contains("95").contains("100");
         });
+    }
+
+    @Test
+    void withoutSubtotalOrTaxOnlyItemsAboveTheTotalAreAContradiction() throws Exception {
+        // Pre-tax items (taxes as CGST/SGST rows, round-off) under the total are fine; above it they are not.
+        assertThat(validate("""
+                {"invoiceNumber":"X","total":57,"lineItems":[{"amount":21},{"amount":33.34}]}""").isValid()).isTrue();
+        assertThat(rules(validate("""
+                {"invoiceNumber":"X","total":100,"lineItems":[{"amount":60},{"amount":50}]}"""))).containsExactly("line-items-sum");
+    }
+
+    @Test
+    void forwardLookingDatesMayBeInTheFuture() throws Exception {
+        JsonNode schema = json.readTree("""
+                {"type":"object","properties":{"invoiceDate":{"type":"string","format":"date"},
+                  "dueDate":{"type":"string","format":"date"},"expiryDate":{"type":"string","format":"date"}}}""");
+        var report = engine.validate(json.readTree("""
+                {"invoiceDate":"2025-06-01","dueDate":"2025-07-01","expiryDate":"2030-01-01"}"""), schema);
+        assertThat(report.isValid()).isTrue();
     }
 
     @Test
@@ -180,5 +200,16 @@ class ValidationEngineTest {
                 {"total":-5,"invoiceDate":"2099-01-01","lineItems":[{"amount":1}]}""");
         assertThat(rules(report)).contains(ValidationEngine.SCHEMA_RULE, "dates-valid", "line-items-sum");
         assertThat(report.violations()).hasSizeGreaterThanOrEqualTo(4);
+    }
+
+    @Test
+    void nullsInsideNestedObjectsAreAbsentToo() throws Exception {
+        var schema = json.readTree("""
+                {"type":"object","properties":{"vendor":{"type":"object","required":["name"],
+                  "properties":{"name":{"type":"string"},"email":{"type":"string"}}}}}""");
+        assertThat(engine.validateExtraction(json.readTree("{\"vendor\":{\"name\":\"ACME\",\"email\":null}}"), schema, List.of())
+                .isValid()).isTrue();
+        assertThat(engine.validateExtraction(json.readTree("{\"vendor\":{\"name\":null,\"email\":null}}"), schema, List.of())
+                .isValid()).isFalse();
     }
 }

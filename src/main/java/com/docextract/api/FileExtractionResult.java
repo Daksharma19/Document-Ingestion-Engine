@@ -13,6 +13,10 @@ import java.util.Map;
  *
  * @param fieldValidation per top-level schema property: true when no violation implicates the field
  * @param routing         why this tier was chosen (auto routing) or "requested"
+ * @param engine          what read the document inside the tier (OCR: "rapidocr-ppocr" or "tesseract")
+ * @param schemaId        the built-in schema used, when the request named one or asked for {@code auto}
+ * @param documentType    with {@code schema=auto}: the document type the classifier picked
+ * @param elapsedMs       wall-clock time spent on this file (reading, mapping, validation, any escalation)
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record FileExtractionResult(
@@ -23,7 +27,11 @@ public record FileExtractionResult(
         String tier,
         String strategy,
         String routing,
+        String engine,
+        String schemaId,
+        String documentType,
         int costUnits,
+        long elapsedMs,
         Map<String, Object> fields,
         Map<String, Double> confidence,
         Map<String, Boolean> fieldValidation,

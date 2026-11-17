@@ -10,7 +10,9 @@ import java.util.List;
 
 /**
  * lineItems[].amount must reconcile with the document totals:
- * with a subtotal, items == subtotal; otherwise items + tax (if any) == total.
+ * with a subtotal, items == subtotal; with a tax figure, items + tax == total. With neither, item amounts may be
+ * pre-tax (tax given as CGST/SGST rows, round-off...), so only items <em>exceeding</em> the total (and no discount)
+ * is a contradiction.
  */
 @Component
 public class LineItemsSumRule implements BusinessRule {
@@ -40,13 +42,15 @@ public class LineItemsSumRule implements BusinessRule {
             return compare(sum, fields.get("subtotal").decimalValue(), "subtotal", "line items sum");
         }
         if (fields.path("total").isNumber()) {
-            BigDecimal expected = sum;
-            String what = "line items sum";
+            BigDecimal total = fields.get("total").decimalValue();
             if (fields.path("tax").isNumber()) {
-                expected = sum.add(fields.get("tax").decimalValue());
-                what = "line items + tax";
+                return compare(sum.add(fields.get("tax").decimalValue()), total, "total", "line items + tax");
             }
-            return compare(expected, fields.get("total").decimalValue(), "total", what);
+            if (sum.subtract(total).compareTo(TOLERANCE) > 0 && !fields.path("discount").isNumber()) {
+                return List.of(new Violation("total", name(),
+                        "line items sum is " + sum.toPlainString() + ", more than the total " + total.toPlainString()));
+            }
+            return List.of();
         }
         return List.of();
     }

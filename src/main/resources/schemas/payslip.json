@@ -1,0 +1,139 @@
+{
+  "id": "payslip",
+  "label": "Payslip",
+  "category": "HR",
+  "description": "Employer, employee, pay period, earnings, deductions and net pay.",
+  "keywords": [
+    "payslip",
+    "pay slip",
+    "salary slip",
+    "net pay",
+    "gross earnings",
+    "deductions",
+    "basic",
+    "hra",
+    "employee id",
+    "provident fund"
+  ],
+  "rules": [
+    "grossEarnings - totalDeductions == netPay"
+  ],
+  "schema": {
+    "type": "object",
+    "required": [
+      "netPay"
+    ],
+    "properties": {
+      "employerName": {
+        "type": "string",
+        "x-labels": [
+          "Company",
+          "Employer",
+          "Company Name"
+        ]
+      },
+      "employeeName": {
+        "type": "string",
+        "x-labels": [
+          "Employee Name",
+          "Name"
+        ]
+      },
+      "employeeId": {
+        "type": "string",
+        "x-labels": [
+          "Employee ID",
+          "Emp ID",
+          "Employee No",
+          "Emp Code",
+          "Employee Code"
+        ]
+      },
+      "designation": {
+        "type": "string",
+        "x-labels": [
+          "Designation",
+          "Job Title",
+          "Position"
+        ]
+      },
+      "department": {
+        "type": "string"
+      },
+      "payPeriod": {
+        "type": "string",
+        "x-labels": [
+          "Pay Period",
+          "Salary Month",
+          "Month",
+          "Payslip for",
+          "Period"
+        ]
+      },
+      "payDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Pay Date",
+          "Payment Date",
+          "Date of Payment"
+        ]
+      },
+      "pan": {
+        "type": "string"
+      },
+      "bankAccountNumber": {
+        "type": "string",
+        "x-labels": [
+          "Bank Account No",
+          "Bank A/C No",
+          "Account No",
+          "Account Number"
+        ]
+      },
+      "basicSalary": {
+        "type": "number",
+        "x-labels": [
+          "Basic Salary",
+          "Basic Pay",
+          "Basic"
+        ]
+      },
+      "hra": {
+        "type": "number",
+        "x-labels": [
+          "HRA",
+          "House Rent Allowance"
+        ]
+      },
+      "grossEarnings": {
+        "type": "number",
+        "x-labels": [
+          "Gross Earnings",
+          "Total Earnings",
+          "Gross Pay",
+          "Gross Salary",
+          "Gross"
+        ]
+      },
+      "totalDeductions": {
+        "type": "number",
+        "x-labels": [
+          "Total Deductions",
+          "Deductions"
+        ]
+      },
+      "netPay": {
+        "type": "number",
+        "x-labels": [
+          "Net Pay",
+          "Net Salary",
+          "Take Home",
+          "Net Payable",
+          "Net Amount"
+        ]
+      }
+    }
+  },
+  "order": 8
+}

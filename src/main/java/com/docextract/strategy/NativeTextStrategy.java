@@ -7,6 +7,8 @@ import com.docextract.strategy.text.TextExtractor;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+
 /** Cheapest tier: the document's own text (PDFBox text layer for PDFs, Tika for Office/text formats). */
 @Component
 public class NativeTextStrategy implements ExtractionStrategy {
@@ -24,6 +26,12 @@ public class NativeTextStrategy implements ExtractionStrategy {
         String text = textExtractor.extractText(document);
         FieldMapper.MappedFields mapped = fieldMapper.map(text, schema);
         return new ExtractionResult(mapped.fields(), mapped.confidence(), text, costTier().costUnits());
+    }
+
+    @Override
+    public Optional<ExtractionResult> remap(ExtractionResult previous, JsonNode schema) {
+        FieldMapper.MappedFields mapped = fieldMapper.map(previous.rawText(), schema);
+        return Optional.of(new ExtractionResult(mapped.fields(), mapped.confidence(), previous.rawText(), previous.costUnits()));
     }
 
     /** Images have no text to read; they need OCR or vision. */

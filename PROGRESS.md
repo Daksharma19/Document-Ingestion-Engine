@@ -100,3 +100,41 @@ Result: 93.2% (from 67.8%); test-docs OCR 54.8% -> 90.5%. Native/auto unchanged 
 Still wrong under OCR: character confusions with no signal in the text ("+91"->"491", "19"->"l9",
 small bold "SuperStore"->"peers") and one line-order ambiguity (Wordpress item name vs its sub-line).
 Vision tier: key not yet provided to the server; `.tools/secrets.properties` (git-ignored) is now read for it.
+
+## Python OCR, more schemas, engine work (branch `engine-python-ocr`, 2026-10-17)
+**OCR moved to Python** (`ocr-service/`, FastAPI + RapidOCR/PP-OCRv6 on ONNX Runtime + OpenCV); Java only routes.
+Tess4J stays as the automatic fallback when the service is down (`docextract.ocr.engine=auto`).
+- Layout rebuilt from boxes: lines grouped by vertical overlap, wide gaps written as 3 spaces (same contract as the
+  PDF text layer), blank lines at paragraph gaps. Skew is measured from the boxes and corrected geometrically.
+- Speed: detection runs on a 1600 px copy, recognition on full-resolution crops (~10 s → ~3.5 s per A4 page);
+  non-local-means denoise dropped (7 s/page, no gain). The 180° line classifier is **off**: it flipped dense
+  justified résumé lines into garbage.
+- OCR tier vs native text on the 5 real test-docs (native = reference, `invoice-detailed` / `resume` schemas):
+  **Tesseract 82.4% → PP-OCR 96.2%** field agreement; résumé 5/10 → 10/10; synthetic scans 10/10 on both.
+  Remaining differences: Haldiram vendor read from the logo ("Haldiram's"), Wordpress item description takes its sub-line.
+
+**15 built-in schemas** served at `GET /api/schemas`; `schema` may be an id or `auto` (keyword classifier).
+**Engine:** nested objects, booleans, name-implied value shapes (email/phone/GSTIN/IFSC/PAN/IBAN/…), receiving-party
+guard, multi-line addresses, bank-statement tables (debit vs credit from the balance change), payslip/statement
+totals no longer read as invoice totals, block labels skip lines that carry their own labels (SuperStore
+"Bill To" now gives "Sean Miller", was "Standard Class"), nested nulls count as absent in validation.
+**Routing:** escalation native → OCR on weak results (keeps the better one; vision only when enabled).
+Frontend: presets from the server, grouped, plus "Auto-detect"; results show detected type and OCR engine;
+nested fields shown as `vendor.name` rows. Tests: 124 Java + 2 Python, all passing.
+Caveat: bank-statement/payslip/utility/ID/insurance schemas are tested on synthetic text only; no real samples yet.
+
+## Speed as the USP (2026-10-17)
+Profiled first: OCR recognition was ~90% of OCR time (95% of it inside the ONNX model), detection and rendering small.
+- **Recogniser:** output layer of PP-OCRv6 small cut to Latin script (18,710 -> 419 classes, `ocr-service/trim_model.py`,
+  built on first start): identical text, ~17-34% less OCR time. Long lines split at word gaps (attention cost grows
+  faster than line length; a first version cut at letter gaps and broke words, fixed: gaps >= 0.35 x height).
+  Four CPU recognisers in parallel (ONNX Runtime kept only ~50% of cores busy). cuDNN search HEURISTIC, not EXHAUSTIVE.
+- **Service:** detection lock separate from the recogniser pool; pages/documents overlap; admission limit of 2.
+- **Java:** content-hash cache of read text (repeat uploads ~20-150 ms), PDF parsed once, files of a batch in parallel,
+  startup warm-up, `elapsedMs` per result, OCR service URL 127.0.0.1 (localhost cost ~0.2-1 s per call on Windows).
+- **Bugs found on the way:** PDFium is not thread-safe (concurrent renders dropped glyphs and once crashed the
+  service: now behind one lock); a busy OCR service failed the 2 s health check and files silently went to
+  Tesseract (a timeout now means busy, a successful call refreshes health, cache hits skip the check); classifier
+  ties between invoice types (keywords now weighted by how many types share them, title lines count most).
+- Numbers: see README "Speed". Accuracy unchanged (96.2% OCR agreement, 10/10 labelled scans, all samples valid).
+  Rejected: v6 tiny, English v4/v5 models, int8 quantisation, lower DPI. Tests: 131 Java + 5 Python.

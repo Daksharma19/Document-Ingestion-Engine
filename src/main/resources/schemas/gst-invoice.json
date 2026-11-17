@@ -1,0 +1,139 @@
+{
+  "id": "gst-invoice",
+  "label": "GST tax invoice (India)",
+  "category": "Finance",
+  "description": "GSTINs, place of supply, HSN codes and the CGST / SGST / IGST split.",
+  "keywords": [
+    "gstin",
+    "cgst",
+    "sgst",
+    "igst",
+    "hsn",
+    "place of supply",
+    "tax invoice",
+    "state code"
+  ],
+  "rules": [],
+  "schema": {
+    "type": "object",
+    "required": [
+      "invoiceNumber",
+      "total"
+    ],
+    "properties": {
+      "supplier": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "gstin": {
+            "type": "string"
+          }
+        }
+      },
+      "buyer": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "gstin": {
+            "type": "string"
+          }
+        },
+        "x-labels": [
+          "Buyer",
+          "Bill To",
+          "Billed To",
+          "Recipient",
+          "Customer"
+        ]
+      },
+      "invoiceNumber": {
+        "type": "string"
+      },
+      "invoiceDate": {
+        "type": "string",
+        "format": "date"
+      },
+      "placeOfSupply": {
+        "type": "string",
+        "x-labels": [
+          "Place of Supply",
+          "Place of supply."
+        ]
+      },
+      "taxableValue": {
+        "type": "number",
+        "x-labels": [
+          "Taxable Value",
+          "Taxable Amount",
+          "Taxable Amt"
+        ]
+      },
+      "cgst": {
+        "type": "number",
+        "x-labels": [
+          "CGST Amount",
+          "Total CGST"
+        ]
+      },
+      "sgst": {
+        "type": "number",
+        "x-labels": [
+          "SGST Amount",
+          "Total SGST"
+        ]
+      },
+      "igst": {
+        "type": "number",
+        "x-labels": [
+          "IGST Amount",
+          "Total IGST"
+        ]
+      },
+      "total": {
+        "type": "number"
+      },
+      "amountInWords": {
+        "type": "string",
+        "x-labels": [
+          "Amount in Words",
+          "Amount Chargeable (in words)",
+          "Rupees"
+        ]
+      },
+      "lineItems": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "hsnCode": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number"
+            },
+            "rate": {
+              "type": "number"
+            },
+            "amount": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  },
+  "order": 2
+}

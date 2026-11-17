@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { ExtractRequest, Tier } from '@/api/types';
 import { Card } from '@/components/Card';
-import { PRESETS, pretty } from '../presets';
+import { AUTO_SCHEMA, FALLBACK_PRESETS, groupByCategory, pretty, useSchemaPresets } from '../presets';
 import { validateRules, validateSchema } from '../validateInput';
 import { FileDropzone } from './FileDropzone';
 
@@ -20,18 +20,27 @@ interface Props {
 
 export function ExtractionForm({ loading, onSubmit, onCancel }: Props) {
   const [files, setFiles] = useState<File[]>([]);
-  const [schema, setSchema] = useState(pretty(PRESETS[0].schema));
-  const [rules, setRules] = useState(pretty(PRESETS[0].rules));
+  const { presets } = useSchemaPresets();
+  const [presetId, setPresetId] = useState(FALLBACK_PRESETS[0].id);
+  const [schema, setSchema] = useState(pretty(FALLBACK_PRESETS[0].schema));
+  const [rules, setRules] = useState(pretty(FALLBACK_PRESETS[0].rules));
   const [tier, setTier] = useState<Tier>('auto');
   const [includeText, setIncludeText] = useState(false);
   const [touched, setTouched] = useState(false);
 
-  const schemaError = useMemo(() => validateSchema(schema), [schema]);
+  const auto = presetId === AUTO_SCHEMA;
+  const schemaError = useMemo(() => (auto ? null : validateSchema(schema)), [auto, schema]);
   const rulesError = useMemo(() => validateRules(rules), [rules]);
   const canSubmit = files.length > 0 && !schemaError && !rulesError && !loading;
+  const selected = presets.find((p) => p.id === presetId);
 
   const applyPreset = (id: string) => {
-    const p = PRESETS.find((x) => x.id === id);
+    setPresetId(id);
+    if (id === AUTO_SCHEMA) {
+      setRules('');
+      return;
+    }
+    const p = presets.find((x) => x.id === id);
     if (!p) return;
     setSchema(pretty(p.schema));
     setRules(pretty(p.rules));
@@ -41,7 +50,7 @@ export function ExtractionForm({ loading, onSubmit, onCancel }: Props) {
     e.preventDefault();
     setTouched(true);
     if (!canSubmit) return;
-    onSubmit({ files, schema, rules, tier, includeText });
+    onSubmit({ files, schema: auto ? AUTO_SCHEMA : schema, rules, tier, includeText });
   };
 
   return (
@@ -54,26 +63,39 @@ export function ExtractionForm({ loading, onSubmit, onCancel }: Props) {
       <Card
         title="2. Schema"
         actions={
-          <select aria-label="Load preset" defaultValue="" onChange={(e) => applyPreset(e.target.value)}>
-            <option value="" disabled>
-              Load preset…
-            </option>
-            {PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
+          <select aria-label="Schema preset" value={presetId} onChange={(e) => applyPreset(e.target.value)}>
+            <option value={AUTO_SCHEMA}>Auto-detect document type</option>
+            {groupByCategory(presets).map(([category, group]) => (
+              <optgroup key={category} label={category}>
+                {group.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         }
       >
-        <label className="field">
-          <span className="field__label">JSON Schema</span>
-          <textarea className="code" rows={14} spellCheck={false} value={schema} onChange={(e) => setSchema(e.target.value)} />
-          {schemaError && <span className="error-text">{schemaError}</span>}
-        </label>
+        {auto ? (
+          <p className="muted preset-hint">
+            Each document is classified (invoice, receipt, bank statement, payslip, résumé, …) and extracted with the
+            matching built-in schema and its default rules. Pick a preset to see or edit a schema.
+          </p>
+        ) : (
+          <>
+            {selected?.description && <p className="muted preset-hint">{selected.description}</p>}
+            <label className="field">
+              <span className="field__label">JSON Schema</span>
+              <textarea className="code" rows={14} spellCheck={false} value={schema} onChange={(e) => setSchema(e.target.value)} />
+              {schemaError && <span className="error-text">{schemaError}</span>}
+            </label>
+          </>
+        )}
         <label className="field">
           <span className="field__label">
-            Business rules <span className="muted">(optional JSON array)</span>
+            Business rules{' '}
+            <span className="muted">(optional JSON array{auto ? "; empty uses each type's defaults" : ''})</span>
           </span>
           <textarea className="code" rows={3} spellCheck={false} value={rules} onChange={(e) => setRules(e.target.value)} />
           {rulesError && <span className="error-text">{rulesError}</span>}

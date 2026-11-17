@@ -1,0 +1,105 @@
+{
+  "id": "id-document",
+  "label": "ID card / passport",
+  "category": "Identity",
+  "description": "Name, document number, date of birth, gender, nationality, issue and expiry dates.",
+  "keywords": [
+    "passport",
+    "date of birth",
+    "nationality",
+    "date of expiry",
+    "identity card",
+    "driving licence",
+    "driver license",
+    "aadhaar",
+    "republic",
+    "government of"
+  ],
+  "rules": [
+    "expiryDate >= issueDate"
+  ],
+  "schema": {
+    "type": "object",
+    "required": [
+      "idNumber"
+    ],
+    "properties": {
+      "fullName": {
+        "type": "string",
+        "x-labels": [
+          "Name",
+          "Full Name",
+          "Given Names",
+          "Holder's Name"
+        ]
+      },
+      "idNumber": {
+        "type": "string",
+        "x-labels": [
+          "Passport No",
+          "Document No",
+          "ID No",
+          "Card No",
+          "Licence No",
+          "License No",
+          "DL No",
+          "ID Number"
+        ]
+      },
+      "dateOfBirth": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Date of Birth",
+          "DOB",
+          "Birth Date"
+        ]
+      },
+      "gender": {
+        "type": "string",
+        "enum": [
+          "Male",
+          "Female",
+          "Other",
+          "M",
+          "F"
+        ],
+        "x-labels": [
+          "Sex",
+          "Gender"
+        ]
+      },
+      "nationality": {
+        "type": "string"
+      },
+      "placeOfBirth": {
+        "type": "string"
+      },
+      "issueDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Date of Issue",
+          "Issue Date",
+          "Issued On",
+          "DOI"
+        ]
+      },
+      "expiryDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Date of Expiry",
+          "Expiry Date",
+          "Valid Until",
+          "Valid Till",
+          "Expires"
+        ]
+      },
+      "address": {
+        "type": "string"
+      }
+    }
+  },
+  "order": 12
+}

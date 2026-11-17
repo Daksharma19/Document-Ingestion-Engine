@@ -1,0 +1,137 @@
+{
+  "id": "bank-statement",
+  "label": "Bank statement",
+  "category": "Finance",
+  "description": "Account details, statement period, opening and closing balances and every transaction.",
+  "keywords": [
+    "statement of account",
+    "account statement",
+    "bank statement",
+    "opening balance",
+    "closing balance",
+    "withdrawal",
+    "deposit",
+    "ifsc",
+    "narration",
+    "debit",
+    "credit"
+  ],
+  "rules": [],
+  "schema": {
+    "type": "object",
+    "required": [
+      "accountNumber"
+    ],
+    "properties": {
+      "bankName": {
+        "type": "string"
+      },
+      "accountHolder": {
+        "type": "string",
+        "x-labels": [
+          "Account Holder",
+          "Account Name",
+          "Customer Name",
+          "Name"
+        ]
+      },
+      "accountNumber": {
+        "type": "string",
+        "x-labels": [
+          "Account No",
+          "Account Number",
+          "A/C No",
+          "Acct No"
+        ]
+      },
+      "ifsc": {
+        "type": "string",
+        "x-labels": [
+          "IFSC",
+          "IFSC Code"
+        ]
+      },
+      "iban": {
+        "type": "string"
+      },
+      "statementPeriod": {
+        "type": "string",
+        "x-labels": [
+          "Statement Period",
+          "Period",
+          "Statement From",
+          "From"
+        ]
+      },
+      "statementDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Statement Date",
+          "Date of Statement",
+          "Generated On"
+        ]
+      },
+      "currency": {
+        "type": "string"
+      },
+      "openingBalance": {
+        "type": "number",
+        "x-labels": [
+          "Opening Balance",
+          "Balance Brought Forward",
+          "Previous Balance"
+        ]
+      },
+      "closingBalance": {
+        "type": "number",
+        "x-labels": [
+          "Closing Balance",
+          "Balance Carried Forward",
+          "Ending Balance"
+        ]
+      },
+      "totalCredits": {
+        "type": "number",
+        "x-labels": [
+          "Total Credits",
+          "Total Deposits",
+          "Credits"
+        ]
+      },
+      "totalDebits": {
+        "type": "number",
+        "x-labels": [
+          "Total Debits",
+          "Total Withdrawals",
+          "Debits"
+        ]
+      },
+      "transactions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": {
+              "type": "string"
+            },
+            "debit": {
+              "type": "number"
+            },
+            "credit": {
+              "type": "number"
+            },
+            "balance": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  },
+  "order": 7
+}

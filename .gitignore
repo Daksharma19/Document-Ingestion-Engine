@@ -35,3 +35,11 @@ build/
 ### Evaluation output ###
 eval-results/
 .tools/
+
+### Python OCR service ###
+ocr-service/.venv/
+__pycache__/
+ocr-service/models/
+
+# real test documents (downloaded, not ours to redistribute)
+test-docs/

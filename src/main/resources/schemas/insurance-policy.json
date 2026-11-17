@@ -1,0 +1,106 @@
+{
+  "id": "insurance-policy",
+  "label": "Insurance policy",
+  "category": "Insurance",
+  "description": "Policy number, insurer, insured person, cover period, sum insured and premium.",
+  "keywords": [
+    "policy",
+    "insured",
+    "insurer",
+    "premium",
+    "sum insured",
+    "policy number",
+    "coverage",
+    "nominee"
+  ],
+  "rules": [
+    "policyEndDate >= policyStartDate"
+  ],
+  "schema": {
+    "type": "object",
+    "required": [
+      "policyNumber"
+    ],
+    "properties": {
+      "insurer": {
+        "type": "string"
+      },
+      "policyNumber": {
+        "type": "string",
+        "x-labels": [
+          "Policy No",
+          "Policy Number",
+          "Certificate No"
+        ]
+      },
+      "insuredName": {
+        "type": "string",
+        "x-labels": [
+          "Insured Name",
+          "Name of Insured",
+          "Policy Holder",
+          "Proposer",
+          "Insured"
+        ]
+      },
+      "policyType": {
+        "type": "string",
+        "x-labels": [
+          "Policy Type",
+          "Plan",
+          "Product",
+          "Plan Name"
+        ]
+      },
+      "policyStartDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Policy Start Date",
+          "Start Date",
+          "Period From",
+          "Valid From",
+          "Inception Date"
+        ]
+      },
+      "policyEndDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Policy End Date",
+          "End Date",
+          "Period To",
+          "Valid To",
+          "Expiry Date"
+        ]
+      },
+      "sumInsured": {
+        "type": "number",
+        "x-labels": [
+          "Sum Insured",
+          "Sum Assured",
+          "Cover Amount",
+          "Coverage"
+        ]
+      },
+      "premium": {
+        "type": "number",
+        "x-labels": [
+          "Total Premium",
+          "Premium Amount",
+          "Premium",
+          "Net Premium"
+        ]
+      },
+      "nominee": {
+        "type": "string",
+        "x-labels": [
+          "Nominee",
+          "Nominee Name",
+          "Beneficiary"
+        ]
+      }
+    }
+  },
+  "order": 13
+}

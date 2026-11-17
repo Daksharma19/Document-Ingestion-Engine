@@ -1,0 +1,117 @@
+{
+  "id": "resume",
+  "label": "Résumé / CV",
+  "category": "HR",
+  "description": "Contact details, summary, skills, experience, education, projects and certifications.",
+  "keywords": [
+    "resume",
+    "curriculum vitae",
+    "experience",
+    "education",
+    "skills",
+    "projects",
+    "linkedin",
+    "github",
+    "certifications",
+    "summary",
+    "objective"
+  ],
+  "rules": [],
+  "schema": {
+    "type": "object",
+    "required": [
+      "name"
+    ],
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "email": {
+        "type": "string",
+        "format": "email"
+      },
+      "phone": {
+        "type": "string"
+      },
+      "linkedin": {
+        "type": "string"
+      },
+      "github": {
+        "type": "string"
+      },
+      "summary": {
+        "type": "string",
+        "x-labels": [
+          "Summary",
+          "Professional Summary",
+          "Profile",
+          "Objective",
+          "About Me",
+          "Career Objective"
+        ]
+      },
+      "skills": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "x-labels": [
+          "Skills",
+          "Technical Skills",
+          "Core Competencies",
+          "Key Skills"
+        ]
+      },
+      "experience": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "x-labels": [
+          "Experience",
+          "Work Experience",
+          "Professional Experience",
+          "Employment History",
+          "Internships"
+        ]
+      },
+      "education": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "x-labels": [
+          "Education",
+          "Academic Background",
+          "Qualifications",
+          "Academics"
+        ]
+      },
+      "projects": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "x-labels": [
+          "Projects",
+          "Personal Projects",
+          "Academic Projects",
+          "Key Projects"
+        ]
+      },
+      "certifications": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "x-labels": [
+          "Certifications",
+          "Certificates",
+          "Achievements",
+          "Licenses"
+        ]
+      }
+    }
+  },
+  "order": 10
+}

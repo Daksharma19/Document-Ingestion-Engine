@@ -1,0 +1,49 @@
+{
+  "id": "invoice",
+  "label": "Invoice (basic)",
+  "category": "Finance",
+  "description": "Vendor, number, date, subtotal, tax and total: the quickest invoice check.",
+  "keywords": [
+    "invoice",
+    "tax invoice",
+    "bill to",
+    "invoice no",
+    "amount due",
+    "subtotal"
+  ],
+  "rules": [
+    "subtotal + tax == total"
+  ],
+  "schema": {
+    "type": "object",
+    "required": [
+      "invoiceNumber",
+      "total"
+    ],
+    "properties": {
+      "vendor": {
+        "type": "string"
+      },
+      "invoiceNumber": {
+        "type": "string"
+      },
+      "invoiceDate": {
+        "type": "string",
+        "format": "date"
+      },
+      "subtotal": {
+        "type": "number"
+      },
+      "tax": {
+        "type": "number"
+      },
+      "total": {
+        "type": "number",
+        "x-labels": [
+          "Total Due"
+        ]
+      }
+    }
+  },
+  "order": 0
+}

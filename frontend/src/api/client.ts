@@ -1,4 +1,4 @@
-import type { ExtractRequest, FileExtractionResult, ProblemDetail } from './types';
+import type { ExtractRequest, FileExtractionResult, ProblemDetail, SchemaPreset } from './types';
 
 /** Base URL for the API. Empty in dev (Vite proxies to :8080); set VITE_API_BASE_URL for other deployments. */
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
@@ -40,6 +40,13 @@ export async function extract(req: ExtractRequest, signal?: AbortSignal): Promis
   }
   if (!res.ok) throw await toApiError(res);
   return (await res.json()) as FileExtractionResult[];
+}
+
+/** The server's built-in schemas; throws when the backend is unreachable (callers fall back to local presets). */
+export async function listSchemas(signal?: AbortSignal): Promise<SchemaPreset[]> {
+  const res = await fetch(`${BASE_URL}/api/schemas`, { signal });
+  if (!res.ok) throw await toApiError(res);
+  return (await res.json()) as SchemaPreset[];
 }
 
 export async function health(signal?: AbortSignal): Promise<boolean> {

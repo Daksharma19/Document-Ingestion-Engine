@@ -1,0 +1,15 @@
+# OCR service for docextract (Python 3.10+). RapidOCR ships the PP-OCR ONNX models, so no download at runtime.
+rapidocr==3.10.0
+onnxruntime==1.31.0
+# GPU (optional, replaces the line above): onnxruntime-directml==1.24.4 (Windows, DirectX 12) or
+# onnxruntime-gpu[cuda,cudnn]==1.31.0 (NVIDIA Turing+, CUDA 13). Pascal GPUs (e.g. MX250): onnxruntime-gpu[cuda,cudnn]==1.26.0
+# with nvidia-cudnn-cu12==9.5.1.17. Select with OCR_DEVICE; see README.
+# onnx: builds the Latin-trimmed recognition model on first start (trim_model.py)
+onnx==1.23.2
+opencv-python-headless==5.0.0.93
+pypdfium2==5.14.0
+pillow==13.0.0
+numpy==2.5.4
+fastapi==0.143.3
+uvicorn==0.54.0
+python-multipart==0.0.32

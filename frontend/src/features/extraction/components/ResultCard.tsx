@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { FileExtractionResult, FileStatus, RuleOutcome } from '@/api/types';
 import { Badge, type BadgeTone } from '@/components/Badge';
 import { Card } from '@/components/Card';
-import { formatPercent, formatValue } from '@/lib/format';
+import { formatDuration, formatPercent, formatValue } from '@/lib/format';
 
 const STATUS_TONE: Record<FileStatus, BadgeTone> = {
   OK: 'success',
@@ -57,9 +57,13 @@ export function ResultCard({ result }: { result: FileExtractionResult }) {
     >
       <dl className="meta">
         {result.detectedType && <Meta k="Type" v={result.detectedType} />}
+        {result.documentType && <Meta k="Detected as" v={result.documentType} />}
+        {result.schemaId && !result.documentType && <Meta k="Schema" v={result.schemaId} />}
         {result.tier && <Meta k="Tier" v={result.tier} />}
+        {result.engine && <Meta k="Engine" v={result.engine} />}
         {result.routing && <Meta k="Routing" v={result.routing} />}
         <Meta k="Cost" v={`${result.costUnits} units`} />
+        {result.elapsedMs !== undefined && <Meta k="Time" v={formatDuration(result.elapsedMs)} />}
       </dl>
 
       {result.error && <p className="error-text">{result.error}</p>}
@@ -79,19 +83,19 @@ export function ResultCard({ result }: { result: FileExtractionResult }) {
                 </tr>
               </thead>
               <tbody>
-                {fieldNames.map((name) => {
+                {fieldNames.flatMap((name) => {
                   const ok = result.fieldValidation?.[name];
                   const conf = result.confidence?.[name];
-                  return (
-                    <tr key={name} className={ok === false ? 'row--invalid' : ''}>
-                      <td className="mono">{name}</td>
-                      <td className="value">{formatValue(fields[name])}</td>
+                  return flattenRows(name, fields[name]).map(([path, value]) => (
+                    <tr key={path} className={ok === false ? 'row--invalid' : ''}>
+                      <td className="mono">{path}</td>
+                      <td className="value">{formatValue(value)}</td>
                       <td>
                         <Badge tone={confidenceTone(conf)}>{formatPercent(conf)}</Badge>
                       </td>
                       <td>{ok === undefined ? '—' : ok ? '✓' : '✗'}</td>
                     </tr>
-                  );
+                  ));
                 })}
               </tbody>
             </table>
@@ -130,6 +134,14 @@ export function ResultCard({ result }: { result: FileExtractionResult }) {
       {view === 'text' && <pre className="code-block">{result.text}</pre>}
     </Card>
   );
+}
+
+/** Nested objects (e.g. vendor.name, vendor.address) get a row per leaf; arrays stay one row. */
+function flattenRows(path: string, value: unknown): [string, unknown][] {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) => flattenRows(`${path}.${k}`, v));
+  }
+  return [[path, value]];
 }
 
 function Meta({ k, v }: { k: string; v: string }) {

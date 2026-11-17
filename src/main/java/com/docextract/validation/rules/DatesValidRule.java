@@ -11,9 +11,15 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Every top-level property declared as format "date" must be a real ISO date that is not in the future. */
+/**
+ * Every top-level property declared as format "date" must be a real ISO date. Dates that record the past (issue,
+ * invoice, birth...) must not be in the future; dates that point forward (due, expiry, delivery, valid until...) may.
+ */
 @Component
 public class DatesValidRule implements BusinessRule {
+
+    private static final java.util.regex.Pattern FORWARD_LOOKING = java.util.regex.Pattern.compile(
+            "(?i).*(due|expir|valid|until|till|deliver|deadline|renew|next|payby|end|ship|eta|arriv|maturity).*");
 
     private final Clock clock;
 
@@ -40,7 +46,7 @@ public class DatesValidRule implements BusinessRule {
             }
             try {
                 LocalDate date = LocalDate.parse(value.asText());
-                if (date.isAfter(today)) {
+                if (date.isAfter(today) && !FORWARD_LOOKING.matcher(e.getKey()).matches()) {
                     out.add(new Violation(e.getKey(), name(), "date " + date + " is in the future"));
                 }
             } catch (DateTimeParseException ex) {

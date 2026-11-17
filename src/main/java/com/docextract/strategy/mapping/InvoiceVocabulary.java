@@ -60,7 +60,8 @@ public final class InvoiceVocabulary {
             return Optional.of(Concept.DISCOUNT);
         }
         if (n.matches(".*(gstin|taxid|vatno|vatnumber|tin|ein|abn)$")) {
-            return Optional.of(Concept.TAX_ID);
+            // The buyer's tax id is not "the" tax id: the vocabulary would find the seller's first.
+            return isCounterparty(n) ? Optional.empty() : Optional.of(Concept.TAX_ID);
         }
         if (n.matches("(total)?(tax|vat|gst|salestax)(amount|total)?")) {
             return Optional.of(Concept.TAX);
@@ -74,6 +75,13 @@ public final class InvoiceVocabulary {
             return Optional.of(Concept.INVOICE_DATE);
         }
         if (n.contains("date")) {
+            return Optional.empty();
+        }
+        if (n.contains("balancedue")) {
+            return Optional.of(Concept.TOTAL);
+        }
+        // Payslip/statement figures are not the invoice total even when named "total...".
+        if (n.matches(".*(deduction|earning|credit|debit|balance|opening|closing|salary|income|expense|allowance|withdraw|deposit|premium|insured|weight|units|consum).*")) {
             return Optional.empty();
         }
         if (n.contains("total") || n.contains("amountdue") || n.contains("payable") || n.contains("balancedue")
@@ -90,13 +98,18 @@ public final class InvoiceVocabulary {
         if (n.matches(".*(id|number|no|num|code|phone|email|address|gstin|vat|tax)$")) {
             return Optional.empty();
         }
-        if (n.matches(".*(vendor|seller|supplier|merchant|company|issuer|store|biller|shop).*")) {
+        if (n.matches(".*(vendor|seller|supplier|merchant|company|issuer|store|biller|shop|provider|employer|insurer|bank).*")) {
             return Optional.of(Concept.VENDOR);
         }
         if (n.matches(".*(customer|buyer|client|billto|soldto|shipto|recipient).*")) {
             return Optional.of(Concept.CUSTOMER);
         }
         return Optional.empty();
+    }
+
+    /** Fields about the receiving party (buyer, customer, consignee...), judged from a normalised name. */
+    public static boolean isCounterparty(String normalisedName) {
+        return normalisedName.matches(".*(customer|buyer|client|billto|soldto|shipto|recipient|consignee|receiver|purchaser|insured|employee|patient).*");
     }
 
     /** ISO code for the first currency code, symbol or "Rs" in the text. */

@@ -1,0 +1,87 @@
+{
+  "id": "credit-note",
+  "label": "Credit note",
+  "category": "Finance",
+  "description": "Credit note number, the invoice it refers to, the reason and the credited amounts.",
+  "keywords": [
+    "credit note",
+    "credit memo",
+    "original invoice",
+    "against invoice",
+    "refund",
+    "returned"
+  ],
+  "rules": [],
+  "schema": {
+    "type": "object",
+    "required": [
+      "creditNoteNumber",
+      "total"
+    ],
+    "properties": {
+      "vendor": {
+        "type": "string"
+      },
+      "customer": {
+        "type": "string",
+        "x-labels": [
+          "Bill To",
+          "Customer",
+          "Credit To"
+        ]
+      },
+      "creditNoteNumber": {
+        "type": "string",
+        "x-labels": [
+          "Credit Note No",
+          "Credit Note #",
+          "Credit Note Number",
+          "CN No",
+          "Credit Memo No"
+        ]
+      },
+      "creditNoteDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Credit Note Date",
+          "Date of Issue",
+          "Date"
+        ]
+      },
+      "originalInvoiceNumber": {
+        "type": "string",
+        "x-labels": [
+          "Original Invoice",
+          "Against Invoice",
+          "Invoice Reference",
+          "Ref Invoice",
+          "Invoice No"
+        ]
+      },
+      "reason": {
+        "type": "string",
+        "x-labels": [
+          "Reason",
+          "Reason for Credit",
+          "Remarks"
+        ]
+      },
+      "subtotal": {
+        "type": "number"
+      },
+      "tax": {
+        "type": "number"
+      },
+      "total": {
+        "type": "number",
+        "x-labels": [
+          "Total Credit",
+          "Credit Amount",
+          "Amount Credited"
+        ]
+      }
+    }
+  },
+  "order": 6
+}

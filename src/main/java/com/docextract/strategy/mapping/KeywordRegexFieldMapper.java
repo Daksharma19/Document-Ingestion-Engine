@@ -1,6 +1,8 @@
 package com.docextract.strategy.mapping;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -27,7 +29,9 @@ import java.util.regex.PatternSyntaxException;
  *   <li>Without a label, schema-driven fallbacks: {@code pattern} (first match in the text), {@code enum}
  *       (first listed value that appears), {@code format} email/uri/date, then invoice heuristics.</li>
  * </ol>
- * Arrays of items are read by {@link LineItemExtractor}.
+ * Arrays of items are read by {@link LineItemExtractor}. Nested objects ({@code "vendor": {"name", "address"}})
+ * are read field by field as if flattened ({@code vendorName}, {@code vendorAddress}). Field names also imply value
+ * shapes ({@code email}, {@code phone}, {@code gstin}, ...; see {@link CommonFormats}).
  */
 @Component
 public class KeywordRegexFieldMapper implements FieldMapper {
@@ -64,17 +68,7 @@ public class KeywordRegexFieldMapper implements FieldMapper {
         Map<String, Object> fields = new LinkedHashMap<>();
         Map<String, Double> confidence = new LinkedHashMap<>();
         schema.path("properties").fields().forEachRemaining(e -> {
-            JsonNode prop = e.getValue();
-            boolean array = "array".equals(prop.path("type").asText());
-            Optional<Found> found;
-            if (array && "string".equals(prop.path("items").path("type").asText())) {
-                // A list of strings: the bullets/lines under the matching heading.
-                found = SectionExtractor.items(doc.text(), labels(e.getKey(), prop)).map(items -> new Found(items, SECTION));
-            } else if (array && isItemTable(e.getKey(), prop)) {
-                found = LineItemExtractor.extract(text, prop.path("items")).map(items -> new Found(items, TABLE));
-            } else {
-                found = findField(doc, e.getKey(), prop);
-            }
+            Optional<Found> found = mapProperty(doc, text, e.getKey(), e.getValue());
             fields.put(e.getKey(), found.map(Found::value).orElse(null));
             confidence.put(e.getKey(), found.map(Found::confidence).orElse(0.0));
         });
@@ -84,20 +78,99 @@ public class KeywordRegexFieldMapper implements FieldMapper {
     private record Found(Object value, double confidence) {
     }
 
+    private Optional<Found> mapProperty(Doc doc, String text, String name, JsonNode prop) {
+        String type = prop.path("type").asText(prop.has("properties") ? "object" : "string");
+        boolean array = "array".equals(type);
+        if (array && "string".equals(prop.path("items").path("type").asText())) {
+            // A list of strings: the bullets/lines under the matching heading.
+            return SectionExtractor.items(doc.text(), labels(name, prop)).map(items -> new Found(items, SECTION));
+        }
+        if (array && isItemTable(name, prop)) {
+            return LineItemExtractor.extract(text, prop.path("items")).map(items -> new Found(items, TABLE));
+        }
+        if ("object".equals(type) && prop.path("properties").isObject()) {
+            return mapObject(doc, text, name, prop);
+        }
+        return findField(doc, name, prop);
+    }
+
+    /**
+     * A nested object is read as its flattened fields: {@code vendor.name} is looked up as {@code vendorName}
+     * (so the vendor vocabulary applies), {@code billTo.address} as {@code billToAddress}. The parent's
+     * {@code x-labels} prefix the child's words too ("Seller" + "address"). Confidence is the mean over the
+     * child fields; an object with nothing found is null.
+     */
+    private Optional<Found> mapObject(Doc doc, String text, String name, JsonNode prop) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        double sum = 0;
+        int count = 0;
+        boolean any = false;
+        for (Map.Entry<String, JsonNode> e : (Iterable<Map.Entry<String, JsonNode>>) () -> prop.get("properties").fields()) {
+            String child = e.getKey();
+            String flat = child.toLowerCase().startsWith(name.toLowerCase()) ? child
+                    : name + Character.toUpperCase(child.charAt(0)) + child.substring(1);
+            JsonNode childProp = e.getValue();
+            String words = child.replaceAll("([a-z0-9])([A-Z])", "$1 $2").replace('_', ' ').toLowerCase();
+            if (childProp.isObject()) {
+                ObjectNode copy = ((ObjectNode) childProp).deepCopy();
+                if (prop.path("x-labels").isArray()) {
+                    ArrayNode extra = copy.has("x-labels") ? (ArrayNode) copy.get("x-labels") : copy.putArray("x-labels");
+                    prop.get("x-labels").forEach(l -> extra.add(l.asText() + " " + words));
+                }
+                // The issuer's own "Address:" / "Phone:" lines are usually unprefixed; the receiving party's never
+                // are (theirs sit under "Bill To"). "name" is excluded: it also matches inside "Customer Name".
+                if (!InvoiceVocabulary.isCounterparty(name.toLowerCase().replaceAll("[^a-z0-9]", "")) && !words.equals("name")) {
+                    copy.putArray(FALLBACK_LABELS).add(words);
+                }
+                childProp = copy;
+            }
+            Optional<Found> found = mapProperty(doc, text, flat, childProp);
+            value.put(child, found.map(Found::value).orElse(null));
+            sum += found.map(Found::confidence).orElse(0.0);
+            count++;
+            any |= found.isPresent();
+        }
+        return any ? Optional.of(new Found(value, Math.round(sum / count * 1000) / 1000.0)) : Optional.empty();
+    }
+
     private Optional<Found> findField(Doc doc, String name, JsonNode prop) {
         Kind kind = Kind.of(prop);
         if (kind == Kind.UNSUPPORTED) {
             return Optional.empty();
         }
+        Optional<CommonFormats.Format> format = prop.has("pattern") || prop.has("enum") || kind != Kind.STRING
+                ? Optional.empty() : CommonFormats.forField(name);
+        if (kind == Kind.NUMBER && GST_HEAD.matcher(name).matches()) {
+            // "CGST 54.33 2.50% 1.36" in the tax summary beats "CGST(2.50%) 0.53" on an item line.
+            Optional<BigDecimal> summary = taxHeadSummary(doc.text(), name.replaceAll("(?i)(amount|amt|total)", ""));
+            if (summary.isPresent()) {
+                return Optional.of(new Found(summary.get(), LABELLED));
+            }
+        }
+        boolean partyName = kind == Kind.STRING && InvoiceVocabulary.conceptOf(name)
+                .filter(c -> c == InvoiceVocabulary.Concept.VENDOR || c == InvoiceVocabulary.Concept.CUSTOMER).isPresent();
         for (String label : labels(name, prop)) {
-            Optional<Object> v = byLabel(doc, label, kind, prop);
+            Optional<Object> v = byLabel(doc, label, kind, prop, format);
+            if (partyName && v.isPresent() && ((String) v.get()).matches("^\\d.*")) {
+                continue; // "SHIP TO   321 Sycamore, Albany" is an address, not the customer's name
+            }
             if (v.isPresent()) {
                 Object value = v.get();
-                if (kind == Kind.STRING && isIdentifier(name)) {
+                if (kind == Kind.STRING && isIdentifier(name) && format.isEmpty()) {
                     value = joinDigitGroups((String) value);
+                }
+                if (kind == Kind.STRING && isAddress(name)) {
+                    value = continueAddress(doc.text(), (String) value);
                 }
                 return Optional.of(new Found(value, LABELLED));
             }
+        }
+        if (format.isPresent()) {
+            // The field name says what the value looks like (an e-mail, a GSTIN...): search the whole text for it.
+            // Not for the receiving party: the first e-mail/GSTIN on a page is usually the issuer's.
+            String normalised = name.toLowerCase().replaceAll("[^a-z0-9]", "");
+            return InvoiceVocabulary.isCounterparty(normalised) ? Optional.empty()
+                    : formatFallback(doc.text(), format.get()).map(v -> new Found(v, SCHEMA_MATCH));
         }
         if (kind == Kind.STRING && !prop.has("pattern") && !prop.has("enum")) {
             // No "Label: value" anywhere: the label may be a heading with the text underneath.
@@ -117,7 +190,8 @@ public class KeywordRegexFieldMapper implements FieldMapper {
      * Every occurrence of the label, in document order; for numbers, occurrences where the number directly follows
      * the label are tried before ones with other words in between.
      */
-    private static Optional<Object> byLabel(Doc doc, String label, Kind kind, JsonNode prop) {
+    private static Optional<Object> byLabel(Doc doc, String label, Kind kind, JsonNode prop,
+                                            Optional<CommonFormats.Format> format) {
         Matcher m = labelPattern(label).matcher(doc.text());
         List<String> direct = new ArrayList<>();
         List<String> indirect = new ArrayList<>();
@@ -129,7 +203,7 @@ public class KeywordRegexFieldMapper implements FieldMapper {
             if (LONGER_LABEL.matcher(raw).lookingAt()) {
                 continue; // "Total Items: 3" is a different label that merely starts with "Total".
             }
-            if (kind == Kind.STRING && isNeighbouringPair(raw)) {
+            if (kind == Kind.STRING && format.isEmpty() && isNeighbouringPair(raw)) {
                 continue; // "From:   Invoice Number   INV-3337": the next cells are another label's pair
             }
             boolean numeric = kind == Kind.NUMBER || kind == Kind.INTEGER;
@@ -137,7 +211,9 @@ public class KeywordRegexFieldMapper implements FieldMapper {
         }
         direct.addAll(indirect);
         for (String raw : direct) {
-            Optional<Object> v = coerce(kind, raw, doc, prop);
+            Optional<Object> v = format.isPresent()
+                    ? CommonFormats.find(format.get(), raw).map(f -> (Object) f)
+                    : coerce(kind, raw, doc, prop);
             if (v.isPresent()) {
                 return v;
             }
@@ -171,6 +247,9 @@ public class KeywordRegexFieldMapper implements FieldMapper {
                 || !Character.isLetter(label.charAt(label.length() - 1));
     }
 
+    /** Internal: labels tried only after all others (set by {@link #mapObject} for the issuing party's fields). */
+    static final String FALLBACK_LABELS = "x-fallback-labels";
+
     static Set<String> labels(String name, JsonNode prop) {
         Set<String> labels = new LinkedHashSet<>();
         prop.path("x-labels").forEach(l -> labels.add(l.asText()));
@@ -187,6 +266,7 @@ public class KeywordRegexFieldMapper implements FieldMapper {
             labels.add(stem + " #");
             labels.add(stem + " id");
         }
+        prop.path(FALLBACK_LABELS).forEach(l -> labels.add(l.asText()));
         return labels;
     }
 
@@ -196,6 +276,7 @@ public class KeywordRegexFieldMapper implements FieldMapper {
             case INTEGER -> ValueParsers.firstAmount(raw).map(BigDecimal::intValue).map(i -> (Object) i);
             case DATE -> ValueParsers.firstDate(raw, doc.monthFirst()).map(d -> (Object) d.toString());
             case STRING -> cleanString(raw);
+            case BOOLEAN -> parseBoolean(raw);
             case UNSUPPORTED -> Optional.empty();
         };
         // A labelled string must still satisfy the schema's own constraints to be accepted.
@@ -328,6 +409,15 @@ public class KeywordRegexFieldMapper implements FieldMapper {
     private static final Pattern TAX_ROW = Pattern.compile(
             "(?im)^[ \\t]*(?:CGST|SGST|UTGST|IGST|GST|VAT|Sales[ \\t]+Tax|Cess)\\b[ \\t]*(?:\\(?[\\d.,]+%\\)?[ \\t]*|[\\d.,]+[ \\t]*)*?([\\d,]+\\.\\d{2})[ \\t]*$");
 
+    private static final Pattern GST_HEAD = Pattern.compile("(?i)(total)?(c|s|i|ut)gst(amount|amt|total)?|(total)?cess(amount)?");
+
+    /** Last amount of the summary row for one tax head: "CGST   54.33   2.50%   1.36" gives 1.36. */
+    static Optional<BigDecimal> taxHeadSummary(String text, String head) {
+        Matcher m = Pattern.compile("(?im)^[ \\t]*" + Pattern.quote(head.replaceAll("(?i)^total", ""))
+                + "\\b[ \\t]*(?:\\(?[\\d.,]+%\\)?[ \\t]*|[\\d.,]+[ \\t]*)*?([\\d,]+\\.\\d{2})[ \\t]*$").matcher(text);
+        return m.find() ? Optional.of(new BigDecimal(m.group(1).replace(",", ""))) : Optional.empty();
+    }
+
     /** Sum of the last amount on every tax-summary row (CGST + SGST, VAT bands, ...). */
     static Optional<BigDecimal> taxSummary(String text) {
         Matcher m = TAX_ROW.matcher(text);
@@ -361,8 +451,75 @@ public class KeywordRegexFieldMapper implements FieldMapper {
         return Optional.empty();
     }
 
+    private static final Pattern YES = Pattern.compile("(?i)^\\s*(yes|y|true|paid|\\[x]|x|✓|✔|☑)(?![A-Za-z])");
+    private static final Pattern NO = Pattern.compile("(?i)^\\s*(no|n|false|unpaid|not\\s+paid|\\[ ]|✗|✘|☐)(?![A-Za-z])");
+
+    static Optional<Object> parseBoolean(String raw) {
+        if (YES.matcher(raw).find()) {
+            return Optional.of(Boolean.TRUE);
+        }
+        return NO.matcher(raw).find() ? Optional.of(Boolean.FALSE) : Optional.empty();
+    }
+
+    /** Unlabelled: distinctive shapes anywhere; a phone number only when written in international/bracket form. */
+    static Optional<String> formatFallback(String text, CommonFormats.Format format) {
+        if (format.distinctive()) {
+            return CommonFormats.find(format, text);
+        }
+        if (format.name().equals("phone")) {
+            Matcher m = CommonFormats.PHONE.matcher(text);
+            while (m.find()) {
+                String v = m.group().trim();
+                if ((v.startsWith("+") || v.startsWith("(")) && v.replaceAll("\\D", "").length() >= 10) {
+                    return Optional.of(v);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    static boolean isAddress(String name) {
+        return name.toLowerCase().matches(".*(address|addr)$");
+    }
+
+    private static final Pattern ADDRESS_LINE = Pattern.compile(".*(\\d|,).*");
+
+    /**
+     * "Address: 12 Main Street" usually continues on the next lines ("Springfield, IL 62704"). Up to three
+     * following left-column cells are appended while they read like address parts: short, with a digit or comma,
+     * no label, not an e-mail/web address/phone/amount.
+     */
+    static String continueAddress(String text, String value) {
+        String[] lines = text.split("\\R");
+        for (int i = 0; i < lines.length; i++) {
+            List<String> cells = LayoutNormalizer.cells(lines[i]);
+            if (cells.isEmpty() || !cells.getFirst().contains(value)) {
+                continue;
+            }
+            StringBuilder out = new StringBuilder(value);
+            for (int j = i + 1; j < lines.length && j <= i + 3; j++) {
+                List<String> next = LayoutNormalizer.cells(lines[j]);
+                if (next.isEmpty()) {
+                    break;
+                }
+                String cell = next.getFirst().strip();
+                if (out.indexOf(cell) >= 0) {
+                    continue; // the same line repeated (layout normalisation emits "Label: value" next to the original)
+                }
+                if (cell.length() > 60 || cell.contains(":") || !ADDRESS_LINE.matcher(cell).matches()
+                        || CommonFormats.EMAIL.matcher(cell).find() || cell.matches("(?i).*(www\\.|https?://).*")
+                        || cell.replaceAll("[\\d\\s()+.-]", "").isEmpty() || !ValueParsers.moneyAmounts(cell).isEmpty()) {
+                    break;
+                }
+                out.append(", ").append(cell);
+            }
+            return out.toString().replaceAll(",\\s*,", ",");
+        }
+        return value;
+    }
+
     enum Kind {
-        STRING, NUMBER, INTEGER, DATE, UNSUPPORTED;
+        STRING, NUMBER, INTEGER, DATE, BOOLEAN, UNSUPPORTED;
 
         static Kind of(JsonNode prop) {
             String type = prop.path("type").asText("string");
@@ -373,6 +530,7 @@ public class KeywordRegexFieldMapper implements FieldMapper {
                 case "string" -> STRING;
                 case "number" -> NUMBER;
                 case "integer" -> INTEGER;
+                case "boolean" -> BOOLEAN;
                 default -> UNSUPPORTED;
             };
         }

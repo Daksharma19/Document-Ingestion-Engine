@@ -10,6 +10,10 @@ export function formatValue(v: unknown): string {
   return String(v);
 }
 
+export function formatDuration(ms: number): string {
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)} s`;
+}
+
 export function formatPercent(x: number | undefined): string {
   return x === undefined ? '—' : `${Math.round(x * 100)}%`;
 }

@@ -71,16 +71,21 @@ public class ValidationEngine {
     /**
      * Validates a tier's output. A null field means "the tier found nothing", which is absence, not a value of
      * the wrong type: nulls are dropped first so "required" reports missing mandatory fields and optional
-     * fields that were not found pass.
+     * fields that were not found pass. The same holds inside nested objects and array items.
      */
     public ValidationReport validateExtraction(JsonNode fields, JsonNode schema, List<RuleExpression> extraRules) {
-        JsonNode present = fields;
-        if (fields.isObject()) {
-            ObjectNode copy = ((ObjectNode) fields).deepCopy();
-            copy.properties().removeIf(e -> e.getValue().isNull());
-            present = copy;
-        }
+        JsonNode present = fields.deepCopy();
+        dropNulls(present);
         return validate(present, schema, extraRules);
+    }
+
+    private static void dropNulls(JsonNode node) {
+        if (node instanceof ObjectNode obj) {
+            obj.properties().removeIf(e -> e.getValue().isNull());
+            obj.forEach(ValidationEngine::dropNulls);
+        } else if (node.isArray()) {
+            node.forEach(ValidationEngine::dropNulls);
+        }
     }
 
     /** Parses the schema's "x-rules"; a malformed rule is the caller's error, reported as RuleSyntaxException. */

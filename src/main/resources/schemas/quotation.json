@@ -1,0 +1,100 @@
+{
+  "id": "quotation",
+  "label": "Quotation / estimate",
+  "category": "Finance",
+  "description": "Quote number, validity, customer and the quoted lines and totals.",
+  "keywords": [
+    "quotation",
+    "quote",
+    "estimate",
+    "valid until",
+    "valid till",
+    "proposal",
+    "quote no"
+  ],
+  "rules": [
+    "validUntil >= quoteDate"
+  ],
+  "schema": {
+    "type": "object",
+    "required": [
+      "total"
+    ],
+    "properties": {
+      "vendor": {
+        "type": "string"
+      },
+      "customer": {
+        "type": "string",
+        "x-labels": [
+          "Prepared For",
+          "Quote To",
+          "Customer",
+          "Client"
+        ]
+      },
+      "quoteNumber": {
+        "type": "string",
+        "x-labels": [
+          "Quote No",
+          "Quote #",
+          "Quotation No",
+          "Estimate No",
+          "Estimate #",
+          "Ref No"
+        ]
+      },
+      "quoteDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Quote Date",
+          "Quotation Date",
+          "Estimate Date",
+          "Date"
+        ]
+      },
+      "validUntil": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Valid Until",
+          "Valid Till",
+          "Expiry Date",
+          "Expires",
+          "Valid Upto"
+        ]
+      },
+      "subtotal": {
+        "type": "number"
+      },
+      "tax": {
+        "type": "number"
+      },
+      "total": {
+        "type": "number"
+      },
+      "lineItems": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "number"
+            },
+            "unitPrice": {
+              "type": "number"
+            },
+            "amount": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    }
+  },
+  "order": 5
+}

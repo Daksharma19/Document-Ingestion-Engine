@@ -1,0 +1,152 @@
+{
+  "id": "shipping-document",
+  "label": "Shipping / delivery note",
+  "category": "Logistics",
+  "description": "Bills of lading, airway bills and delivery notes: parties, tracking number, route, packages, weight.",
+  "keywords": [
+    "shipper",
+    "consignee",
+    "bill of lading",
+    "airway bill",
+    "awb",
+    "tracking",
+    "waybill",
+    "delivery note",
+    "packages",
+    "gross weight",
+    "carrier",
+    "consignment"
+  ],
+  "rules": [],
+  "schema": {
+    "type": "object",
+    "required": [
+      "trackingNumber"
+    ],
+    "properties": {
+      "shipper": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "x-labels": [
+          "Shipper",
+          "Consignor",
+          "Sender",
+          "From"
+        ]
+      },
+      "consignee": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "x-labels": [
+          "Consignee",
+          "Receiver",
+          "Deliver To",
+          "To"
+        ]
+      },
+      "trackingNumber": {
+        "type": "string",
+        "x-labels": [
+          "Tracking No",
+          "Tracking Number",
+          "AWB No",
+          "Waybill No",
+          "Consignment No",
+          "LR No",
+          "Docket No",
+          "B/L No",
+          "Bill of Lading No",
+          "Delivery Note No"
+        ]
+      },
+      "shipDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Ship Date",
+          "Shipment Date",
+          "Dispatch Date",
+          "Date of Shipment",
+          "Date"
+        ]
+      },
+      "deliveryDate": {
+        "type": "string",
+        "format": "date",
+        "x-labels": [
+          "Delivery Date",
+          "Expected Delivery",
+          "ETA"
+        ]
+      },
+      "carrier": {
+        "type": "string",
+        "x-labels": [
+          "Carrier",
+          "Courier",
+          "Transporter",
+          "Shipping Line",
+          "Vessel"
+        ]
+      },
+      "origin": {
+        "type": "string",
+        "x-labels": [
+          "Origin",
+          "Port of Loading",
+          "From"
+        ]
+      },
+      "destination": {
+        "type": "string",
+        "x-labels": [
+          "Destination",
+          "Port of Discharge",
+          "Place of Delivery"
+        ]
+      },
+      "numberOfPackages": {
+        "type": "integer",
+        "x-labels": [
+          "No. of Packages",
+          "Packages",
+          "No of Pieces",
+          "Pieces",
+          "Total Packages"
+        ]
+      },
+      "weight": {
+        "type": "number",
+        "x-labels": [
+          "Gross Weight",
+          "Total Weight",
+          "Weight",
+          "Chargeable Weight"
+        ]
+      },
+      "freightCharges": {
+        "type": "number",
+        "x-labels": [
+          "Freight Charges",
+          "Freight",
+          "Shipping Charges"
+        ]
+      }
+    }
+  },
+  "order": 11
+}

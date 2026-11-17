@@ -39,7 +39,7 @@ public final class LayoutNormalizer {
             int next = nextNonBlank(lines, i + 1);
             if (next >= 0 && isHeaderRow(header)) {
                 List<String> values = cells(lines[next]);
-                if (values.size() == header.size() && !isHeaderRow(values)) {
+                if (values.size() == header.size() && !isHeaderRow(values) && !isLabelValuePair(values)) {
                     for (int c = 0; c < header.size(); c++) {
                         out.add(header.get(c) + ": " + values.get(c));
                     }
@@ -48,9 +48,14 @@ public final class LayoutNormalizer {
                 }
             }
             out.add(lines[i]);
-            // Block labels: emit "Label: value" in addition, keeping the original lines.
-            if (next >= 0) {
-                List<String> below = cells(lines[next]);
+            // Block labels: emit "Label: value" in addition, keeping the original lines. A line below that carries
+            // its own labels ("Ship Mode:   Standard Class") belongs to someone else; look up to two lines further.
+            int valueLine = next;
+            for (int skipped = 0; valueLine >= 0 && skipped < 2 && hasLabelCell(cells(lines[valueLine])); skipped++) {
+                valueLine = nextNonBlank(lines, valueLine + 1);
+            }
+            if (valueLine >= 0 && !hasLabelCell(cells(lines[valueLine]))) {
+                List<String> below = cells(lines[valueLine]);
                 for (int c = 0; c < header.size() && c < below.size(); c++) {
                     String cell = header.get(c).strip();
                     String value = below.get(c).strip();
@@ -77,6 +82,18 @@ public final class LayoutNormalizer {
             }
         }
         return !LineItemExtractor.isTableHeader(String.join(" ", cells));
+    }
+
+    /** "Total Discount   -0.01": a caption and its number, i.e. a line of its own, not values under a header. */
+    static boolean isLabelValuePair(List<String> cells) {
+        return cells.size() == 2 && LABEL_CELL.matcher(cells.get(0).strip()).matches()
+                && cells.get(0).chars().filter(Character::isLetter).count() >= 3
+                && cells.get(1).strip().matches("[-+(]?[$€£₹]?\\s?[\\d,]+(\\.\\d+)?%?\\)?");
+    }
+
+    /** A cell that is a label ("Ship Mode:") or a labelled pair ("Phone: 123"). */
+    private static boolean hasLabelCell(List<String> cells) {
+        return cells.stream().anyMatch(c -> c.contains(":"));
     }
 
     private static int nextNonBlank(String[] lines, int from) {

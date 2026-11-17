@@ -1,5 +1,6 @@
 package com.docextract.strategy.text;
 
+import com.docextract.document.ContentCache;
 import com.docextract.document.Document;
 import com.docextract.strategy.ExtractionException;
 import org.apache.pdfbox.Loader;
@@ -10,7 +11,10 @@ import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 
-/** PDFs go through PDFBox directly; every other format goes through Tika's auto-detection. */
+/**
+ * PDFs go through PDFBox directly; every other format goes through Tika's auto-detection. A PDF is parsed once:
+ * the text-layer check (routing) and the extraction share the result, which is also cached by content.
+ */
 @Component
 public class TextExtractor {
 
@@ -18,38 +22,53 @@ public class TextExtractor {
     static final int MIN_CHARS_PER_PAGE = 20;
 
     private final Tika tika;
+    private final ContentCache cache;
 
     public TextExtractor() {
+        this(new ContentCache(0));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public TextExtractor(ContentCache cache) {
         this.tika = new Tika();
         this.tika.setMaxStringLength(10_000_000);
+        this.cache = cache;
+    }
+
+    /** A PDF's text layer and page count, from one parse. */
+    private record PdfText(String text, int pages) {
     }
 
     public String extractText(Document document) {
-        try {
-            return document.isPdf() ? pdfText(document) : tika.parseToString(new ByteArrayInputStream(document.bytes()));
-        } catch (Exception e) {
-            throw new ExtractionException("could not extract text from " + document.filename(), e);
+        if (document.isPdf()) {
+            return pdfText(document).text();
         }
+        return cache.get(document, "text:tika", () -> {
+            try {
+                return tika.parseToString(new ByteArrayInputStream(document.bytes()));
+            } catch (Exception e) {
+                throw new ExtractionException("could not extract text from " + document.filename(), e);
+            }
+        });
     }
 
     /** True when the PDF's embedded text layer carries real content on average across its pages. */
     public boolean hasTextLayer(Document document) {
-        try (PDDocument pdf = Loader.loadPDF(document.bytes())) {
-            int pages = Math.max(1, pdf.getNumberOfPages());
-            String text = new PDFTextStripper().getText(pdf);
-            long meaningful = text.chars().filter(Character::isLetterOrDigit).count();
-            return meaningful >= (long) MIN_CHARS_PER_PAGE * pages;
-        } catch (Exception e) {
-            throw new ExtractionException("could not read PDF " + document.filename(), e);
-        }
+        PdfText pdf = pdfText(document);
+        long meaningful = pdf.text().chars().filter(Character::isLetterOrDigit).count();
+        return meaningful >= (long) MIN_CHARS_PER_PAGE * Math.max(1, pdf.pages());
     }
 
-    private String pdfText(Document document) throws Exception {
-        try (PDDocument pdf = Loader.loadPDF(document.bytes())) {
-            PDFTextStripper stripper = new ColumnGapStripper();
-            stripper.setSortByPosition(true);
-            return stripper.getText(pdf);
-        }
+    private PdfText pdfText(Document document) {
+        return cache.get(document, "text:pdf", () -> {
+            try (PDDocument pdf = Loader.loadPDF(document.bytes())) {
+                PDFTextStripper stripper = new ColumnGapStripper();
+                stripper.setSortByPosition(true);
+                return new PdfText(stripper.getText(pdf), pdf.getNumberOfPages());
+            } catch (Exception e) {
+                throw new ExtractionException("could not read PDF " + document.filename(), e);
+            }
+        });
     }
 
     /**
