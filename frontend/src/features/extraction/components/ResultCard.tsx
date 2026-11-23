@@ -2,6 +2,9 @@ import { useState } from 'react';
 import type { FileExtractionResult, FileStatus, RuleOutcome } from '@/api/types';
 import { Badge, type BadgeTone } from '@/components/Badge';
 import { Card } from '@/components/Card';
+import { CodeBlock } from '@/components/CodeBlock';
+import { DataTable } from '@/components/DataTable';
+import { Segmented } from '@/components/Segmented';
 import { formatDuration, formatPercent, formatValue } from '@/lib/format';
 
 const STATUS_TONE: Record<FileStatus, BadgeTone> = {
@@ -20,10 +23,25 @@ function confidenceTone(c: number | undefined): BadgeTone {
   return 'danger';
 }
 
+type View = 'table' | 'json' | 'text';
+
 export function ResultCard({ result }: { result: FileExtractionResult }) {
-  const [view, setView] = useState<'table' | 'json' | 'text'>('table');
+  const [view, setView] = useState<View>('table');
   const fields = result.fields ?? {};
   const fieldNames = Object.keys(fields);
+  const rows = fieldNames.flatMap((name) => {
+    const ok = result.fieldValidation?.[name];
+    const conf = result.confidence?.[name];
+    return flattenRows(name, fields[name]).map(([path, value]) => ({
+      invalid: ok === false,
+      cells: [
+        <span key="p" className="mono">{path}</span>,
+        <span key="v" className="value">{formatValue(value)}</span>,
+        <Badge key="c" tone={confidenceTone(conf)}>{formatPercent(conf)}</Badge>,
+        ok === undefined ? '—' : ok ? '✓' : '✗',
+      ],
+    }));
+  });
 
   return (
     <Card
@@ -38,20 +56,17 @@ export function ResultCard({ result }: { result: FileExtractionResult }) {
       }
       actions={
         result.status === 'OK' && (
-          <div className="segmented" role="tablist">
-            {(['table', 'json', ...(result.text !== undefined ? ['text'] : [])] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                role="tab"
-                aria-selected={view === v}
-                className={view === v ? 'active' : ''}
-                onClick={() => setView(v as typeof view)}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
+          <Segmented<View>
+            label={`View for ${result.filename}`}
+            size="sm"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'table', label: 'Table' },
+              { value: 'json', label: 'JSON' },
+              ...(result.text !== undefined ? [{ value: 'text' as const, label: 'Text' }] : []),
+            ]}
+          />
         )
       }
     >
@@ -66,39 +81,14 @@ export function ResultCard({ result }: { result: FileExtractionResult }) {
         {result.elapsedMs !== undefined && <Meta k="Time" v={formatDuration(result.elapsedMs)} />}
       </dl>
 
-      {result.error && <p className="error-text">{result.error}</p>}
+      {result.error && <p className="error-text" role="alert">{result.error}</p>}
 
       {result.status === 'OK' && view === 'table' && (
         <>
           {fieldNames.length === 0 ? (
             <p className="muted">No fields extracted.</p>
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Field</th>
-                  <th>Value</th>
-                  <th>Confidence</th>
-                  <th>Valid</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fieldNames.flatMap((name) => {
-                  const ok = result.fieldValidation?.[name];
-                  const conf = result.confidence?.[name];
-                  return flattenRows(name, fields[name]).map(([path, value]) => (
-                    <tr key={path} className={ok === false ? 'row--invalid' : ''}>
-                      <td className="mono">{path}</td>
-                      <td className="value">{formatValue(value)}</td>
-                      <td>
-                        <Badge tone={confidenceTone(conf)}>{formatPercent(conf)}</Badge>
-                      </td>
-                      <td>{ok === undefined ? '—' : ok ? '✓' : '✗'}</td>
-                    </tr>
-                  ));
-                })}
-              </tbody>
-            </table>
+            <DataTable head={['Field', 'Value', 'Confidence', 'Valid']} rows={rows.map((r) => r.cells)} rowClassName={(i) => (rows[i].invalid ? 'row--invalid' : undefined)} />
           )}
 
           {!!result.violations?.length && (
@@ -130,8 +120,8 @@ export function ResultCard({ result }: { result: FileExtractionResult }) {
         </>
       )}
 
-      {view === 'json' && <pre className="code-block">{JSON.stringify(result, null, 2)}</pre>}
-      {view === 'text' && <pre className="code-block">{result.text}</pre>}
+      {view === 'json' && <CodeBlock label={`JSON for ${result.filename}`}>{JSON.stringify(result, null, 2)}</CodeBlock>}
+      {view === 'text' && <CodeBlock label={`Text read from ${result.filename}`}>{result.text ?? ''}</CodeBlock>}
     </Card>
   );
 }

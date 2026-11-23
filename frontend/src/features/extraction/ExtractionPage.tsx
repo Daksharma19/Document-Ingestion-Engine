@@ -1,13 +1,16 @@
 import { ExtractionForm } from './components/ExtractionForm';
 import { ResultsPanel } from './components/ResultsPanel';
-import { useExtraction } from './hooks/useExtraction';
+import type { useExtraction } from './hooks/useExtraction';
 
-export function ExtractionPage() {
-  const { state, run, cancel } = useExtraction();
+/** State lives in App (useExtraction) so switching modes keeps results. */
+export function ExtractionPage({ extraction }: { extraction: ReturnType<typeof useExtraction> }) {
+  const { state, run, cancel } = extraction;
   return (
     <div className="layout">
-      <ExtractionForm loading={state.phase === 'loading'} onSubmit={run} onCancel={cancel} />
-      <div className="layout__results">
+      <div className="layout__form">
+        <ExtractionForm loading={state.phase === 'loading'} onSubmit={run} onCancel={cancel} />
+      </div>
+      <div className="layout__results" aria-live="polite">
         <ResultsPanel state={state} />
       </div>
     </div>

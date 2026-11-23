@@ -4,11 +4,13 @@ interface CardProps {
   title?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
+  as?: 'section' | 'article';
+  id?: string;
 }
 
-export function Card({ title, actions, children }: CardProps) {
+export function Card({ title, actions, children, as: Tag = 'section', id }: CardProps) {
   return (
-    <section className="card">
+    <Tag className="card" id={id}>
       {(title || actions) && (
         <header className="card__header">
           {title && <h2 className="card__title">{title}</h2>}
@@ -16,6 +18,6 @@ export function Card({ title, actions, children }: CardProps) {
         </header>
       )}
       <div className="card__body">{children}</div>
-    </section>
+    </Tag>
   );
 }

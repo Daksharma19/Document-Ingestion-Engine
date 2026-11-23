@@ -43,3 +43,5 @@ ocr-service/models/
 
 # real test documents (downloaded, not ours to redistribute)
 test-docs/
+logs/
+frontend/.vite/

@@ -3,7 +3,10 @@ import type { ExtractRequest, Tier } from '@/api/types';
 import { Card } from '@/components/Card';
 import { AUTO_SCHEMA, FALLBACK_PRESETS, groupByCategory, pretty, useSchemaPresets } from '../presets';
 import { validateRules, validateSchema } from '../validateInput';
-import { FileDropzone } from './FileDropzone';
+import { Button } from '@/components/Button';
+import { FileDropzone, batchProblem } from '@/components/FileDropzone';
+
+export const EXTRACT_MAX_FILES = 20;
 
 const TIERS: { value: Tier; label: string; hint: string }[] = [
   { value: 'auto', label: 'Auto', hint: 'Route by detected file type' },
@@ -31,7 +34,8 @@ export function ExtractionForm({ loading, onSubmit, onCancel }: Props) {
   const auto = presetId === AUTO_SCHEMA;
   const schemaError = useMemo(() => (auto ? null : validateSchema(schema)), [auto, schema]);
   const rulesError = useMemo(() => validateRules(rules), [rules]);
-  const canSubmit = files.length > 0 && !schemaError && !rulesError && !loading;
+  const filesProblem = batchProblem(files, EXTRACT_MAX_FILES);
+  const canSubmit = !filesProblem && !schemaError && !rulesError && !loading;
   const selected = presets.find((p) => p.id === presetId);
 
   const applyPreset = (id: string) => {
@@ -54,10 +58,10 @@ export function ExtractionForm({ loading, onSubmit, onCancel }: Props) {
   };
 
   return (
-    <form onSubmit={submit} className="stack">
+    <form onSubmit={submit} className="stack" noValidate>
       <Card title="1. Documents">
-        <FileDropzone files={files} onChange={setFiles} />
-        {touched && files.length === 0 && <p className="error-text">Add at least one document.</p>}
+        <FileDropzone files={files} onChange={setFiles} maxFiles={EXTRACT_MAX_FILES} />
+        {touched && filesProblem && <p className="error-text">{filesProblem}</p>}
       </Card>
 
       <Card
@@ -123,13 +127,13 @@ export function ExtractionForm({ loading, onSubmit, onCancel }: Props) {
 
       <div className="form-actions">
         {loading ? (
-          <button type="button" className="btn btn--secondary" onClick={onCancel}>
+          <Button type="button" variant="secondary" onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
         ) : null}
-        <button type="submit" className="btn btn--primary" disabled={loading}>
+        <Button type="submit" variant="primary" busy={loading} disabled={!canSubmit}>
           {loading ? 'Extracting…' : `Extract ${files.length || ''} ${files.length === 1 ? 'file' : 'files'}`.replace(/\s+/g, ' ')}
-        </button>
+        </Button>
       </div>
     </form>
   );

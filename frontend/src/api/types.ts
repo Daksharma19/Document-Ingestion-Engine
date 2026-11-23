@@ -75,3 +75,73 @@ export interface ProblemDetail {
   status?: number;
   detail?: string;
 }
+
+// ---- /api/parse: com.docextract.parse.model.* (all @JsonInclude(NON_NULL), so nullable fields are optional) ----
+
+export type PageMethod = 'NATIVE' | 'OCR' | 'LAYOUT' | 'VISION';
+export type BlockType = 'HEADING' | 'PARAGRAPH' | 'LIST_ITEM' | 'TABLE' | 'FIGURE';
+
+/** PDF points, origin top-left. */
+export interface BBox {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+export interface Block {
+  type: BlockType;
+  text?: string;
+  /** Headings only; 1 = top. */
+  level?: number;
+  /** Tables only; rows[0] is the header when the source had one. */
+  rows?: string[][];
+  /** Absent when the source has no geometry (DOCX). */
+  bbox?: BBox;
+  confidence: number;
+  method?: PageMethod;
+}
+
+export interface PageProbe {
+  width: number;
+  height: number;
+  meaningfulChars: number;
+  lines: number;
+  garbageRatio: number;
+  imageAreaRatio: number;
+  inkRatio?: number;
+  functionWordRatio?: number;
+}
+
+export interface ParsedPage {
+  /** 1-based (PdfPage.index is 1-based; OFFICE_OR_TEXT emits 1). */
+  index: number;
+  method: PageMethod;
+  reason?: string;
+  pending: boolean;
+  confidence?: number;
+  costUnits: number;
+  probe?: PageProbe;
+  blocks?: Block[];
+}
+
+export type ParseStatus = 'OK' | 'ERROR';
+
+export interface ParsedDocument {
+  filename?: string;
+  mediaType?: string;
+  /** Free string on the wire; display verbatim. */
+  kind?: string;
+  status: ParseStatus;
+  error?: string;
+  pages?: ParsedPage[];
+  markdown?: string;
+  costUnits: number;
+  elapsedMs: number;
+}
+
+export interface ParseRequest {
+  files: File[];
+  includeMarkdown: boolean;
+  figures: boolean;
+}
