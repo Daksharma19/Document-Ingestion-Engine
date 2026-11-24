@@ -1,0 +1,8 @@
+parser,Content (digital),Content (scanned),Word accuracy,Table rows,Reading order,Headings,Coverage,Speed,Overall
+docextract (ours),0.986,0.991,0.994,1.0,0.954,0.727,1.0,0.467,0.95
+docling,0.861,0.947,0.958,0.944,0.91,0.955,1.0,0.199,0.939
+"ocr-service (ours, OCR only)",0.789,0.991,0.995,0.833,0.84,0.0,0.889,0.226,0.762
+tesseract,0.721,0.838,0.929,0.528,0.833,0.0,0.889,0.309,0.677
+pypdf,0.767,0.111,0.0,0.278,0.528,0.0,0.593,0.746,0.325
+pdfplumber,0.729,0.111,0.0,0.333,0.502,0.0,0.593,0.717,0.324
+pymupdf,0.785,0.111,0.0,0.0,0.528,0.0,0.593,1.0,0.288

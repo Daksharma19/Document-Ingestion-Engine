@@ -1,7 +1,3 @@
-#!/usr/bin/env bash
-# Starts the whole docextract stack: OCR service (:8001), Spring API (:8080) and React UI (:5173).
-# Services already running are left alone. Ctrl+C stops everything this script started.
-# Logs: logs/ocr.log, logs/api.log, logs/frontend.log
 set -u
 cd "$(dirname "$0")"
 ROOT="$PWD"
@@ -10,7 +6,7 @@ PIDS=()
 
 up() { curl -s -m 2 "$1" 2>/dev/null | grep -q '"UP"'; }
 
-wait_for() { # name url seconds logfile
+wait_for() { 
   printf 'Waiting for %s' "$1"
   for _ in $(seq "$3"); do
     if up "$2"; then echo " ... UP"; return 0; fi
@@ -29,7 +25,6 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-# --- Java: the bundled Linux JDK, else whatever is installed
 if [ -x "$ROOT/.tools/jdk-linux/bin/java" ]; then
   export JAVA_HOME="$ROOT/.tools/jdk-linux"
 elif ! command -v java >/dev/null; then
@@ -66,12 +61,26 @@ else
   echo " ... UP"
 fi
 
+# --- 4. Analysis dashboard
+if [ -z "${NO_ANALYSIS:-}" ]; then
+  if curl -s -m 2 -o /dev/null http://localhost:8501; then
+    echo "Analysis dashboard already running on :8501"
+  else
+    setsid bash "$ROOT/bench/bench.sh" > logs/analysis.log 2>&1 < /dev/null &
+    PIDS+=($!)
+    printf 'Waiting for analysis dashboard'
+    for _ in $(seq 120); do curl -s -m 2 -o /dev/null http://localhost:8501 && break; printf '.'; sleep 1; done
+    echo " ... UP"
+  fi
+fi
+
 cat <<EOF
 
 docextract is running:
   UI        http://localhost:5173
   API       http://localhost:8080   (POST /api/extract, POST /api/parse, GET /api/schemas)
   OCR       http://127.0.0.1:8001
+  Analysis  http://localhost:8501
   Logs      $ROOT/logs/
 EOF
 

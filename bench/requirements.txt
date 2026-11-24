@@ -1,0 +1,18 @@
+# Benchmark harness — install into its own venv (bench/.venv), separate from ocr-service.
+# Any parser whose package is missing is skipped automatically.
+pandas
+matplotlib
+requests
+jupyterlab
+streamlit
+plotly
+pypdfium2
+pillow
+pypdf
+pdfplumber
+pymupdf
+pytesseract        # also needs the binary: sudo apt install tesseract-ocr
+markitdown[all]
+docling            # large (torch); comment out if you don't want it
+# your OCR engine, in-process (rapidocr-engine adapter):
+-r ../ocr-service/requirements.txt
