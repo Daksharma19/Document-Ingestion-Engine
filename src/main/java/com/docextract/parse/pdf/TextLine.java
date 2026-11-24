@@ -6,7 +6,12 @@ import com.docextract.parse.model.BBox;
  * One visual line of a PDF text layer. Wide horizontal gaps inside the line are written as three spaces
  * ({@link PdfPageReader#COLUMN_GAP}), so table cells and side-by-side columns stay apart.
  */
-public record TextLine(String text, BBox bbox, float fontSize, boolean bold, double confidence, boolean figure) {
+public record TextLine(String text, BBox bbox, float fontSize, boolean bold, double confidence, boolean figure,
+                       boolean italic) {
+
+    public TextLine(String text, BBox bbox, float fontSize, boolean bold, double confidence, boolean figure) {
+        this(text, bbox, fontSize, bold, confidence, figure, false);
+    }
 
     /** A line from a text layer: exact, so confidence 1. */
     public TextLine(String text, BBox bbox, float fontSize, boolean bold) {

@@ -29,9 +29,7 @@ public final class NativePageParser {
         }
         float body = bodyFontSize(lines);
         boolean boldBody = lines.stream().filter(TextLine::bold).count() * 2 > lines.size();
-        // OCR boxes carry no font information and their heights vary by a few pixels: only clearly larger
-        // lines count as headings there
-        boolean strict = method == PageMethod.OCR;
+        Style style = new Style(body, boldBody, lines.stream().filter(TextLine::italic).count() * 2 > lines.size(), method == PageMethod.OCR);
         List<Block> out = new ArrayList<>();
         int i = 0;
         while (i < lines.size()) {
@@ -58,12 +56,12 @@ public final class NativePageParser {
                     continue;
                 }
             }
-            Integer level = headingLevel(line, body, boldBody, strict);
+            Integer level = headingLevel(line, style);
             if (level != null) {
                 StringBuilder text = new StringBuilder(line.text());
                 BBox box = line.bbox();
                 int j = i + 1;
-                while (j < lines.size() && !lines.get(j).figure() && level.equals(headingLevel(lines.get(j), body, boldBody, strict))
+                while (j < lines.size() && !lines.get(j).figure() && level.equals(headingLevel(lines.get(j), style))
                         && Math.abs(lines.get(j).fontSize() - line.fontSize()) < 0.5 && closeBelow(lines.get(j - 1), lines.get(j), 1.5)) {
                     join(text, lines.get(j).text());
                     box = lines.get(j).bbox().union(box);
@@ -78,7 +76,7 @@ public final class NativePageParser {
                 BBox box = line.bbox();
                 int j = i + 1;
                 // wrapped continuation lines are indented past the bullet and carry no bullet of their own
-                while (j < lines.size() && isContinuation(lines.get(j - 1), lines.get(j), body, boldBody, strict)
+                while (j < lines.size() && isContinuation(lines.get(j - 1), lines.get(j), style)
                         && lines.get(j).bbox().x0() > line.bbox().x0() + 2) {
                     join(text, lines.get(j).text());
                     box = lines.get(j).bbox().union(box);
@@ -91,7 +89,7 @@ public final class NativePageParser {
             StringBuilder text = new StringBuilder(line.text());
             BBox box = line.bbox();
             int j = i + 1;
-            while (j < lines.size() && isContinuation(lines.get(j - 1), lines.get(j), body, boldBody, strict)) {
+            while (j < lines.size() && isContinuation(lines.get(j - 1), lines.get(j), style)) {
                 join(text, lines.get(j).text());
                 box = lines.get(j).bbox().union(box);
                 j++;
@@ -115,9 +113,9 @@ public final class NativePageParser {
     }
 
     /** The next line belongs to the same paragraph: close below, not a heading/bullet/table row itself. */
-    private static boolean isContinuation(TextLine prev, TextLine next, float body, boolean boldBody, boolean strict) {
+    private static boolean isContinuation(TextLine prev, TextLine next, Style style) {
         return !next.figure() && closeBelow(prev, next, 1.7)
-                && headingLevel(next, body, boldBody, strict) == null
+                && headingLevel(next, style) == null
                 && !BULLET.matcher(next.text()).find()
                 && cells(next.text()).size() < 2;
     }
@@ -132,13 +130,20 @@ public final class NativePageParser {
         return delta > 0.3 * size && delta <= maxLeading * size;
     }
 
-    static Integer headingLevel(TextLine line, float body, boolean boldBody, boolean strict) {
+    /**
+     * The page's body style. OCR boxes carry no font information and their heights vary by a few pixels: with
+     * {@code strict} only clearly larger lines count as headings.
+     */
+    record Style(float body, boolean boldBody, boolean italicBody, boolean strict) {
+    }
+
+    static Integer headingLevel(TextLine line, Style style) {
         String t = line.text();
         if (t.length() > 100 || cells(t).size() >= 2 || BULLET.matcher(t).find()) {
             return null;
         }
-        float ratio = body > 0 ? line.fontSize() / body : 1;
-        if (strict) {
+        float ratio = style.body() > 0 ? line.fontSize() / style.body() : 1;
+        if (style.strict()) {
             return ratio >= 1.8 ? Integer.valueOf(1) : ratio >= 1.4 ? Integer.valueOf(2) : null;
         }
         if (ratio >= 1.6) {
@@ -147,10 +152,35 @@ public final class NativePageParser {
         if (ratio >= 1.3) {
             return 2;
         }
-        if (ratio >= 1.12 || (line.bold() && !boldBody && t.length() <= 80 && !t.endsWith(".") && !t.endsWith(","))) {
+        if (ratio >= 1.12 || (line.bold() && !style.boldBody() && t.length() <= 80 && !t.endsWith(".") && !t.endsWith(","))) {
             return 3;
         }
+        // run-in italic subheads ("Boots Self-Locking Nut"): short, title case, no sentence punctuation
+        if (line.italic() && !line.bold() && !style.italicBody() && ratio > 0.95 && t.length() <= 60
+                && !t.matches(".*[.,;:]$") && titleCase(t)) {
+            return 4;
+        }
         return null;
+    }
+
+    /** Most words start with a capital (small words like "of", "and" don't count against it). */
+    static boolean titleCase(String t) {
+        String[] words = t.strip().split("\\s+");
+        if (words.length == 0 || !Character.isUpperCase(words[0].charAt(0))) {
+            return false;
+        }
+        int counted = 0;
+        int upper = 0;
+        for (String w : words) {
+            if (w.length() <= 3 && w.chars().allMatch(Character::isLowerCase)) {
+                continue;
+            }
+            counted++;
+            if (Character.isUpperCase(w.charAt(0)) || Character.isDigit(w.charAt(0))) {
+                upper++;
+            }
+        }
+        return counted > 0 && upper * 10 >= counted * 8;
     }
 
     /** The font size most of the page's characters are set in. */

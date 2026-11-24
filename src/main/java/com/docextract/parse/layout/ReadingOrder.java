@@ -166,10 +166,86 @@ public final class ReadingOrder {
                 best.add(s);
             }
         }
+        attachCellLines(rows);
         List<TextLine> out = new ArrayList<>(rows.size());
         for (List<TextLine> row : rows) {
-            row.sort(Comparator.comparingDouble(s -> s.bbox().x0()));
-            out.add(join(row));
+            out.add(join(cellOrder(row)));
+        }
+        return out;
+    }
+
+    /**
+     * A table cell with two lines ("Web Design" over "This is a sample description...") sits half a line above and
+     * below the rest of its row, so neither line overlaps the row enough to join it. A row that touches a
+     * neighbouring table row (three or more cells) vertically, and only fills that row's empty columns, is part of it.
+     */
+    static void attachCellLines(List<List<TextLine>> rows) {
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (int i = 0; i < rows.size() && !changed; i++) {
+                List<TextLine> row = rows.get(i);
+                for (int t : new int[] {i + 1, i - 1}) {
+                    if (t < 0 || t >= rows.size() || rows.get(t).size() < 3 || row.size() >= rows.get(t).size()
+                            || !fitsInto(row, rows.get(t))) {
+                        continue;
+                    }
+                    rows.get(t).addAll(row);
+                    rows.remove(i);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    private static boolean fitsInto(List<TextLine> row, List<TextLine> table) {
+        double top = table.stream().mapToDouble(r -> r.bbox().y0()).min().orElse(0);
+        double bottom = table.stream().mapToDouble(r -> r.bbox().y1()).max().orElse(0);
+        double left = table.stream().mapToDouble(r -> r.bbox().x0()).min().orElse(0);
+        double right = table.stream().mapToDouble(r -> r.bbox().x1()).max().orElse(0);
+        for (TextLine s : row) {
+            if (s.figure() || s.height() > 1.5 * (bottom - top)) {
+                return false;
+            }
+            // touches the row vertically, inside its horizontal extent, and collides with none of its cells
+            if (Math.min(bottom, s.bbox().y1()) - Math.max(top, s.bbox().y0()) <= 0
+                    || s.bbox().x0() < left || s.bbox().x0() > right) {
+                return false;
+            }
+            for (TextLine c : table) {
+                // sharing a column is fine only when stacked above/below (the other line of the same cell)
+                if (Math.min(c.bbox().x1(), s.bbox().x1()) - Math.max(c.bbox().x0(), s.bbox().x0()) > 0
+                        && Math.min(c.bbox().y1(), s.bbox().y1()) - Math.max(c.bbox().y0(), s.bbox().y0()) > 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** Left to right by column; lines stacked in one column (a multi-line cell) top to bottom. */
+    static List<TextLine> cellOrder(List<TextLine> row) {
+        List<TextLine> byX = new ArrayList<>(row);
+        byX.sort(Comparator.comparingDouble(s -> s.bbox().x0()));
+        List<List<TextLine>> cols = new ArrayList<>();
+        double reach = Double.NEGATIVE_INFINITY;
+        for (TextLine s : byX) {
+            if (cols.isEmpty() || s.bbox().x0() >= reach) {
+                cols.add(new ArrayList<>());
+            }
+            cols.getLast().add(s);
+            reach = Math.max(reach, s.bbox().x1());
+        }
+        List<TextLine> out = new ArrayList<>();
+        for (List<TextLine> c : cols) {
+            if (c.size() > 1 && c.stream().anyMatch(a -> c.stream().anyMatch(b -> a != b
+                    && Math.min(a.bbox().y1(), b.bbox().y1()) - Math.max(a.bbox().y0(), b.bbox().y0()) > 0.5 * Math.min(a.height(), b.height())))) {
+                out.addAll(c); // same visual line, already left to right
+            } else {
+                c.sort(Comparator.comparingDouble(s -> s.bbox().y0()));
+                out.addAll(c);
+            }
         }
         return out;
     }
@@ -183,6 +259,7 @@ public final class ReadingOrder {
         float size = 0;
         int chars = 0;
         int boldChars = 0;
+        int italicChars = 0;
         double conf = 0;
         TextLine prev = null;
         for (TextLine s : row) {
@@ -199,10 +276,14 @@ public final class ReadingOrder {
             if (s.bold()) {
                 boldChars += n;
             }
+            if (s.italic()) {
+                italicChars += n;
+            }
             conf += s.confidence() * n;
             prev = s;
         }
-        return new TextLine(text.toString(), box, size, boldChars * 2 > chars, conf / chars);
+        return new TextLine(text.toString(), box, size, boldChars * 2 > chars, conf / chars, false,
+                italicChars * 2 > chars);
     }
 
     private static double medianSize(List<TextLine> segs) {

@@ -126,7 +126,7 @@ public class PdfPageReader {
         }
 
         final List<PageLines> pages = new ArrayList<>();
-        private List<TextLine> lines;
+        private List<Segment> segments;
         private List<Glyph> buffer = new ArrayList<>();
         private StringBuilder angledText = new StringBuilder();
         private boolean inAngled;
@@ -135,6 +135,7 @@ public class PdfPageReader {
         private float maxSize;
         private int chars;
         private int boldChars;
+        private int italicChars;
         private int glyphs;
         private int badGlyphs;
         private float lastEndX;
@@ -145,7 +146,7 @@ public class PdfPageReader {
 
         @Override
         protected void startPage(PDPage page) throws IOException {
-            lines = new ArrayList<>();
+            segments = new ArrayList<>();
             inAngled = false;
             glyphs = 0;
             badGlyphs = 0;
@@ -156,12 +157,22 @@ public class PdfPageReader {
         @Override
         protected void endPage(PDPage page) throws IOException {
             flush();
-            pages.add(new PageLines(List.copyOf(lines), glyphs, badGlyphs));
+            pages.add(new PageLines(lines(segments), glyphs, badGlyphs));
             super.endPage(page);
         }
 
         /** One glyph of the current segment; {@code verbatim} pieces are whole angled runs kept as PDFBox read them. */
-        private record Glyph(String text, double x0, double x1, float size, boolean space, boolean verbatim) {
+        record Glyph(String text, double x0, double x1, double y0, double y1, float size, boolean space,
+                     boolean verbatim, boolean bold, boolean italic) {
+
+            Glyph(String text, double x0, double x1, float size, boolean space, boolean verbatim) {
+                this(text, x0, x1, 0, 0, size, space, verbatim, false, false);
+            }
+        }
+
+        /** A finished run of glyphs, kept until the page ends so runs drawn out of order can be merged. */
+        record Segment(List<Glyph> glyphs, String angledText, BBox box, float maxSize, int chars, int boldChars,
+                       int italicChars, float dir) {
         }
 
         @Override
@@ -199,12 +210,18 @@ public class PdfPageReader {
                 box = box == null ? b : box.union(b);
                 maxSize = Math.max(maxSize, p.getFontSizeInPt());
                 chars++;
-                if (isBold(p.getFont())) {
+                boolean bold = isBold(p.getFont());
+                boolean italic = isItalic(p.getFont());
+                if (bold) {
                     boldChars++;
+                }
+                if (italic) {
+                    italicChars++;
                 }
                 if (!angled) {
                     String u = p.getUnicode() == null ? "" : isSoftHyphen(p.getUnicode()) ? "-" : p.getUnicode();
-                    buffer.add(new Glyph(u, x0, x0 + p.getWidthDirAdj(), p.getFontSizeInPt(), u.isBlank(), false));
+                    buffer.add(new Glyph(u, x0, x0 + p.getWidthDirAdj(), y0, y1, p.getFontSizeInPt(), isSpace(u),
+                            false, bold, italic));
                 }
             }
             if (angled) {
@@ -261,6 +278,11 @@ public class PdfPageReader {
             return out.toString();
         }
 
+        /** Blank, including no-break and other Unicode spaces (U+00A0 is not Java whitespace). */
+        static boolean isSpace(String u) {
+            return u.chars().allMatch(c -> Character.isWhitespace(c) || Character.isSpaceChar(c));
+        }
+
         static boolean isSoftHyphen(String u) {
             return "\uFFFE".equals(u) || "\u00AD".equals(u) || "\u0002".equals(u);
         }
@@ -292,12 +314,150 @@ public class PdfPageReader {
         }
 
         private void flush() {
-            String t = !angledText.isEmpty() ? angledText.toString().replaceAll("\\s+", " ").strip()
-                    : buffer.isEmpty() ? "" : ligatures(spaced(buffer)).strip();
-            if (!t.isEmpty() && box != null) {
-                lines.add(new TextLine(t, box, maxSize, chars > 0 && boldChars * 2 > chars));
+            if (box != null && (!angledText.isEmpty() || !buffer.isEmpty())) {
+                segments.add(new Segment(List.copyOf(buffer), angledText.isEmpty() ? null : angledText.toString(),
+                        box, maxSize, chars, boldChars, italicChars, lastDir));
             }
             resetLine();
+        }
+
+        /**
+         * Turns the page's segments into lines. Segments on one baseline whose spans interleave were drawn out of
+         * order (a generator that writes "(  %)" first and "CGST 2.50" into the gaps afterwards): their glyphs
+         * are merged and sorted by position, then split again at wide gaps. Segments that don't overlap, such as
+         * neighbouring columns, are never merged, so content-stream order still keeps columns apart.
+         */
+        static List<TextLine> lines(List<Segment> segs) {
+            int n = segs.size();
+            int[] parent = new int[n];
+            for (int i = 0; i < n; i++) {
+                parent[i] = i;
+            }
+            Integer[] byBase = new Integer[n];
+            for (int i = 0; i < n; i++) {
+                byBase[i] = i;
+            }
+            java.util.Arrays.sort(byBase, java.util.Comparator.comparingDouble(i -> segs.get(i).box().y1()));
+            for (int a = 0; a < n; a++) {
+                Segment sa = segs.get(byBase[a]);
+                if (sa.angledText() != null) {
+                    continue;
+                }
+                double tol = 0.5 * Math.max(1, sa.box().y1() - sa.box().y0());
+                for (int b = a + 1; b < n; b++) {
+                    Segment sb = segs.get(byBase[b]);
+                    if (sb.box().y1() - sa.box().y1() > tol) {
+                        break;
+                    }
+                    if (sb.angledText() == null && sb.dir() == sa.dir() && interleaved(sa, sb)) {
+                        parent[find(parent, byBase[a])] = find(parent, byBase[b]);
+                    }
+                }
+            }
+            java.util.Map<Integer, List<Integer>> groups = new java.util.LinkedHashMap<>();
+            for (int i = 0; i < n; i++) {
+                groups.computeIfAbsent(find(parent, i), k -> new ArrayList<>()).add(i);
+            }
+            List<TextLine> out = new ArrayList<>();
+            java.util.Set<Integer> done = new java.util.HashSet<>();
+            for (int i = 0; i < n; i++) {
+                int root = find(parent, i);
+                if (!done.add(root)) {
+                    continue;
+                }
+                List<Integer> g = groups.get(root);
+                if (g.size() == 1) {
+                    line(segs.get(i)).ifPresent(out::add);
+                    continue;
+                }
+                List<Glyph> merged = new ArrayList<>();
+                for (int k : g) {
+                    merged.addAll(segs.get(k).glyphs());
+                }
+                merged.sort(java.util.Comparator.comparingDouble(Glyph::x0));
+                for (List<Glyph> run : splitAtGaps(dedupe(merged))) {
+                    line(run).ifPresent(out::add);
+                }
+            }
+            return List.copyOf(out);
+        }
+
+        private static int find(int[] parent, int i) {
+            while (parent[i] != i) {
+                parent[i] = parent[parent[i]];
+                i = parent[i];
+            }
+            return i;
+        }
+
+        /** Both segments lie on one baseline and their horizontal spans overlap. */
+        static boolean interleaved(Segment a, Segment b) {
+            return Math.min(a.box().x1(), b.box().x1()) - Math.max(a.box().x0(), b.box().x0()) > 0.5;
+        }
+
+        /** A glyph drawn twice at (almost) the same spot, the "fake bold" trick, is kept once. */
+        static List<Glyph> dedupe(List<Glyph> sorted) {
+            List<Glyph> out = new ArrayList<>();
+            for (Glyph g : sorted) {
+                if (!out.isEmpty()) {
+                    Glyph p = out.getLast();
+                    if (p.text().equals(g.text()) && Math.abs(p.x0() - g.x0()) < 0.3 * Math.max(0.5, g.x1() - g.x0())) {
+                        continue;
+                    }
+                }
+                out.add(g);
+            }
+            return out;
+        }
+
+        /** Splits position-sorted glyphs where the gap is wider than 2.5 typical glyph widths (a cell or column). */
+        static List<List<Glyph>> splitAtGaps(List<Glyph> sorted) {
+            double[] w = sorted.stream().filter(g -> !g.space()).mapToDouble(g -> g.x1() - g.x0()).sorted().toArray();
+            double limit = 2.5 * (w.length == 0 ? 5 : Math.max(1, w[w.length / 2]));
+            List<List<Glyph>> runs = new ArrayList<>();
+            List<Glyph> cur = new ArrayList<>();
+            double end = Double.NaN;
+            for (Glyph g : sorted) {
+                if (!g.space() && !Double.isNaN(end) && g.x0() - end > limit) {
+                    runs.add(cur);
+                    cur = new ArrayList<>();
+                }
+                cur.add(g);
+                if (!g.space()) {
+                    end = Double.isNaN(end) ? g.x1() : Math.max(end, g.x1());
+                }
+            }
+            runs.add(cur);
+            return runs;
+        }
+
+        private static java.util.Optional<TextLine> line(Segment s) {
+            if (s.angledText() != null) {
+                String t = s.angledText().replaceAll("\\s+", " ").strip();
+                return t.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(new TextLine(t, s.box(),
+                        s.maxSize(), s.chars() > 0 && s.boldChars() * 2 > s.chars(), 1.0, false,
+                        s.chars() > 0 && s.italicChars() * 2 > s.chars()));
+            }
+            return line(s.glyphs());
+        }
+
+        private static java.util.Optional<TextLine> line(List<Glyph> glyphs) {
+            String t = glyphs.isEmpty() ? "" : ligatures(spaced(glyphs)).strip();
+            if (t.isEmpty()) {
+                return java.util.Optional.empty();
+            }
+            BBox b = null;
+            float size = 0;
+            int bold = 0;
+            int italic = 0;
+            for (Glyph g : glyphs) {
+                b = new BBox(g.x0(), g.y0(), g.x1(), g.y1()).union(b);
+                size = Math.max(size, g.size());
+                bold += g.bold() ? 1 : 0;
+                italic += g.italic() ? 1 : 0;
+            }
+            return java.util.Optional.of(new TextLine(t, b, size, bold * 2 > glyphs.size(), 1.0, false,
+                    italic * 2 > glyphs.size()));
         }
 
         private void resetLine() {
@@ -307,6 +467,7 @@ public class PdfPageReader {
             maxSize = 0;
             chars = 0;
             boldChars = 0;
+            italicChars = 0;
             lastEndX = Float.NaN;
         }
 
@@ -316,12 +477,38 @@ public class PdfPageReader {
                     .replace("\uFB03", "ffi").replace("\uFB04", "ffl").replace("\uFB05", "st").replace("\uFB06", "st");
         }
 
-        private static boolean isBold(PDFont font) {
-            if (font == null || font.getName() == null) {
+        /** TeX bold faces (CMBX10, SFBX1000, LMRomanDemi) and "-Bd" cuts don't say "bold" in their names. */
+        private static final java.util.regex.Pattern BOLD_NAME = java.util.regex.Pattern.compile(
+                "bold|black|heavy|semibold|demi|^(?:cm|sf|lm|ec|tc)[a-z]*bx|[-,]bd(?:[a-z]{0,3})?$|[-,]bd[-,]");
+        private static final java.util.regex.Pattern ITALIC_NAME = java.util.regex.Pattern.compile(
+                "italic|oblique|^(?:cm|sf|lm|ec|tc)[a-z]*(?:ti|sl)\\d|[-,]it$|[-,]it[-,]");
+
+        static boolean isBold(PDFont font) {
+            if (font == null) {
                 return false;
             }
-            String n = font.getName().toLowerCase(Locale.ROOT);
-            return n.contains("bold") || n.contains("black") || n.contains("heavy") || n.contains("semibold");
+            var fd = font.getFontDescriptor();
+            if (fd != null && (fd.isForceBold() || fd.getFontWeight() >= 600)) {
+                return true;
+            }
+            return font.getName() != null && BOLD_NAME.matcher(baseName(font.getName())).find();
+        }
+
+        static boolean isItalic(PDFont font) {
+            if (font == null) {
+                return false;
+            }
+            var fd = font.getFontDescriptor();
+            if (fd != null && (fd.isItalic() || Math.abs(fd.getItalicAngle()) > 1)) {
+                return true;
+            }
+            return font.getName() != null && ITALIC_NAME.matcher(baseName(font.getName())).find();
+        }
+
+        /** "ABCDEF+Times-Italic" -> "times-italic" (drops the subset tag). */
+        static String baseName(String name) {
+            int plus = name.indexOf('+');
+            return (plus == 6 ? name.substring(plus + 1) : name).toLowerCase(Locale.ROOT);
         }
     }
 
