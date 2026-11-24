@@ -17,13 +17,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** POST /api/parse: one structured parse (pages, blocks, Markdown) per uploaded file, in upload order. */
+/**
+ * POST /api/parse: one structured parse (pages, blocks, Markdown) per uploaded file, in upload order. A {@code .zip}
+ * upload is replaced by the documents inside it ({@link ArchiveExpander}).
+ */
 @RestController
 public class ParseController {
 
     static final int MAX_FILES = 50;
 
     private final ParseEngine engine;
+    private final ArchiveExpander archives;
     private final ExecutorService pool = Executors.newFixedThreadPool(
             Math.max(2, Runtime.getRuntime().availableProcessors()), r -> {
                 Thread t = new Thread(r, "parse");
@@ -31,8 +35,9 @@ public class ParseController {
                 return t;
             });
 
-    public ParseController(ParseEngine engine) {
+    public ParseController(ParseEngine engine, ArchiveExpander archives) {
         this.engine = engine;
+        this.archives = archives;
     }
 
     @PostMapping(path = "/api/parse", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -43,8 +48,9 @@ public class ParseController {
             throw new InvalidRequestException("at least one file is required (multipart part 'files')");
         }
         if (files.size() > MAX_FILES) {
-            throw new InvalidRequestException("at most " + MAX_FILES + " files per request");
+            throw new InvalidRequestException("at most " + MAX_FILES + " files per request (zip many documents into one .zip)");
         }
+        files = archives.expand(files);
         List<CompletableFuture<ParsedDocument>> futures = new ArrayList<>();
         for (MultipartFile f : files) {
             ParseEngine.Options options = new ParseEngine.Options(figures);

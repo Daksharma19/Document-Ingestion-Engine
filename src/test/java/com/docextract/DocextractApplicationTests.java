@@ -172,4 +172,30 @@ class DocextractApplicationTests {
                 .andExpect(jsonPath("$[0].costUnits").value(21))
                 .andExpect(jsonPath("$[0].fields.total").value(165.20));
     }
+
+    @Test
+    void aZipUploadIsUnpackedIntoOneResultPerDocument() throws Exception {
+        var buf = new java.io.ByteArrayOutputStream();
+        try (var zip = new java.util.zip.ZipOutputStream(buf)) {
+            for (String name : new String[]{"invoice-001.pdf", "receipt-002.docx"}) {
+                zip.putNextEntry(new java.util.zip.ZipEntry("batch/" + name));
+                zip.write(Files.readAllBytes(Path.of("corpus", name)));
+                zip.closeEntry();
+            }
+        }
+        mvc.perform(multipart("/api/parse")
+                        .file(new MockMultipartFile("files", "docs.zip", "application/zip", buf.toByteArray())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].filename").value("docs.zip/batch/invoice-001.pdf"))
+                .andExpect(jsonPath("$[0].status").value("OK"))
+                .andExpect(jsonPath("$[1].filename").value("docs.zip/batch/receipt-002.docx"))
+                .andExpect(jsonPath("$[1].status").value("OK"));
+        mvc.perform(multipart("/api/extract")
+                        .file(new MockMultipartFile("files", "docs.zip", "application/zip", buf.toByteArray()))
+                        .param("schema", "invoice"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].fields.invoiceNumber").value("INV-2024-001"));
+    }
 }

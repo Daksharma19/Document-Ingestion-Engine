@@ -44,7 +44,8 @@ import java.util.concurrent.Future;
 public class ExtractionService {
 
     private static final Logger log = LoggerFactory.getLogger(ExtractionService.class);
-    static final int MAX_FILES = 20;
+    /** Documents per request after archives are unpacked; the controller separately caps uploaded parts at 20. */
+    static final int MAX_FILES = 500;
 
     private final ObjectMapper mapper;
     private final List<ExtractionStrategy> strategies;
@@ -126,7 +127,7 @@ public class ExtractionService {
             throw new InvalidRequestException("at least one file is required (multipart part 'files')");
         }
         if (files.size() > MAX_FILES) {
-            throw new InvalidRequestException("at most " + MAX_FILES + " files per request");
+            throw new InvalidRequestException("at most " + MAX_FILES + " documents per request");
         }
         List<RuleExpression> rules = rulesJson == null || rulesJson.isBlank() ? null : parseRules(rulesJson);
         SchemaRequest request = resolveSchema(schemaJson, rules);

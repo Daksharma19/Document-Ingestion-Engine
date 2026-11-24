@@ -1,6 +1,7 @@
 package com.docextract.api;
 
 import com.docextract.service.ExtractionService;
+import com.docextract.service.InvalidRequestException;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,16 +16,21 @@ import java.util.Map;
 @RestController
 public class ExtractionController {
 
-    private final ExtractionService extractionService;
+    static final int MAX_UPLOADS = 20;
 
-    public ExtractionController(ExtractionService extractionService) {
+    private final ExtractionService extractionService;
+    private final ArchiveExpander archives;
+
+    public ExtractionController(ExtractionService extractionService, ArchiveExpander archives) {
         this.extractionService = extractionService;
+        this.archives = archives;
     }
 
     /**
      * Multipart: one or more {@code files} parts (a single legacy {@code file} part is also accepted), one
      * {@code schema} (JSON Schema text), optional {@code rules} (JSON array of rule expressions) and optional
      * {@code tier} (auto | native-text | ocr | vision-llm) and {@code includeText} (echo the text the tier read). Returns one result per file, in upload order.
+     * A {@code .zip} upload is replaced by the documents inside it ({@link ArchiveExpander}), named {@code a.zip/path}.
      */
     @PostMapping(path = "/api/extract", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public List<FileExtractionResult> extract(@RequestParam(value = "files", required = false) List<MultipartFile> files,
@@ -40,7 +46,10 @@ public class ExtractionController {
         if (file != null) {
             all.addAll(file);
         }
-        return extractionService.extract(all, schema, rules, tier, includeText);
+        if (all.size() > MAX_UPLOADS) {
+            throw new InvalidRequestException("at most " + MAX_UPLOADS + " files per request (zip many documents into one .zip)");
+        }
+        return extractionService.extract(archives.expand(all), schema, rules, tier, includeText);
     }
 
     @GetMapping("/health")

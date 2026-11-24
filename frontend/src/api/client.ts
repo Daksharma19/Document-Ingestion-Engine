@@ -15,7 +15,7 @@ export class ApiError extends Error {
 }
 
 async function toApiError(res: Response): Promise<ApiError> {
-  if (res.status === 413) return new ApiError('Upload too large (25 MB per request)', 413);
+  if (res.status === 413) return new ApiError('Upload too large (20 MB per document, 200 MB per .zip, 210 MB per request)', 413);
   try {
     const problem = (await res.json()) as ProblemDetail;
     return new ApiError(problem.detail ?? problem.title ?? res.statusText, res.status);
