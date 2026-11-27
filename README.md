@@ -34,7 +34,8 @@ harness that compares tiers on accuracy and cost. See [PROGRESS.md](PROGRESS.md)
   ```bash
   mkdir -p .tools/tessdata && curl -L -o .tools/tessdata/eng.traineddata https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata
   ```
-- Vision tier (optional): `OPENAI_API_KEY` in the environment, or a git-ignored `.tools/secrets.properties`
+- Vision tier (optional): `OPENAI_API_KEY` in the environment, in a git-ignored `.env` file at the repo root
+  (`OPENAI_API_KEY=sk-...`), or a git-ignored `.tools/secrets.properties`
   containing `docextract.vision.api-key=...`. Without it the tier reports `TIER_NOT_CONFIGURED` and never
   returns made-up output.
 - OCR tuning (application.properties): `docextract.ocr.page-seg-mode` (6), `docextract.ocr.dpi` (300),

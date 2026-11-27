@@ -45,3 +45,7 @@ ocr-service/models/
 test-docs/
 logs/
 frontend/.vite/
+
+# local secrets (never commit)
+.env
+.apiKey

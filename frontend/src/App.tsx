@@ -1,5 +1,4 @@
 import { Alert } from '@/components/Alert';
-import { HealthPill } from '@/components/HealthPill';
 import { Segmented } from '@/components/Segmented';
 import { ExtractionPage } from '@/features/extraction/ExtractionPage';
 import { useExtraction } from '@/features/extraction/hooks/useExtraction';
@@ -29,7 +28,6 @@ export function App() {
         <div className="topbar__mode">
           <Segmented<Mode> label="Mode" options={MODES} value={mode} onChange={setMode} />
         </div>
-        <HealthPill status={health} />
       </header>
       <main className="container">
         {health === 'down' && (
