@@ -61,9 +61,17 @@ def reading_order(text: str, snippets: list[str]) -> float | None:
     """Missing snippets count as out of order, so a parser can't score well by dropping text."""
     if len(snippets) < 2:
         return None
+    # each snippet is looked for after the previous match, so a phrase that also occurs earlier in lower case
+    # ("the elastic stop nut" in a sentence before the "Elastic Stop Nut" heading) doesn't count as out of order
     tn = norm(text)
-    pos = [tn.find(norm(s)) for s in snippets]
-    good = sum(1 for a, b in zip(pos, pos[1:]) if a >= 0 and b > a)
+    good, prev = 0, tn.find(norm(snippets[0]))
+    for s in snippets[1:]:
+        nxt = tn.find(norm(s), prev + 1) if prev >= 0 else -1
+        if nxt > prev >= 0:
+            good += 1
+        else:
+            nxt = tn.find(norm(s))
+        prev = nxt
     return good / (len(snippets) - 1)
 
 

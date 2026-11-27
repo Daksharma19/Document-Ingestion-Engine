@@ -3,8 +3,11 @@ package com.docextract.parse;
 import com.docextract.document.ContentCache;
 import com.docextract.document.Document;
 import com.docextract.document.DocumentTypeDetector;
+import com.docextract.parse.layout.ReadingOrder;
+import com.docextract.parse.model.BBox;
 import com.docextract.parse.model.ParsedDocument;
 import com.docextract.parse.pdf.PdfPageReader;
+import com.docextract.parse.pdf.TextLine;
 import com.docextract.parse.plan.PagePlanner;
 import com.docextract.parse.tier.OcrPageParser;
 import com.docextract.parse.tier.OfficeParser;
@@ -14,6 +17,8 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -64,5 +69,19 @@ class LayoutFixesTest {
         assertThat(markdown("real/amt_handbook_sample.pdf"))
                 .containsPattern("(?m)^#+ Boots Self-Locking Nut$")
                 .containsPattern("(?m)^#+ Stainless Steel Self-Locking Nut$");
+    }
+
+    @Test
+    void figureOverhangingTheGutterDoesNotMergeColumns() throws Exception {
+        Path p = Path.of("test-docs", "real/amt_handbook_sample.pdf");
+        assumeTrue(Files.exists(p), "test document missing: " + p);
+        List<TextLine> segs = new ArrayList<>(new PdfPageReader(new ContentCache(4))
+                .read(new Document(p.getFileName().toString(), null, Files.readAllBytes(p))).getFirst().lines());
+        // OCR'd image region as the service returns it: the picture box runs past the 311-321pt gutter
+        segs.add(TextLine.figure("Elastic anchor nut", new BBox(203, 542, 341, 606), 1.0));
+        List<String> text = ReadingOrder.order(segs).stream().map(TextLine::text).toList();
+        assertThat(text).contains("to the supporting structure by the nut and bolt. Plates must", "Elastic Stop Nut");
+        assertThat(text.indexOf("Elastic Stop Nut"))
+                .isGreaterThan(text.indexOf("insert to be compressed when the nut is tightened."));
     }
 }

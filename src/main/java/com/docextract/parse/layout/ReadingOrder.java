@@ -69,6 +69,26 @@ public final class ReadingOrder {
      * beside a heading), which lets a gutter win over the small horizontal gaps that aligned columns share.
      */
     private static List<List<TextLine>> verticalSplit(List<TextLine> segs, double unit, boolean tall) {
+        // an image box often overhangs the gutter (a picture wider than its column); find the channel from the
+        // text alone and give each figure to the side holding its centre
+        List<TextLine> text = segs.stream().filter(s -> !s.figure()).toList();
+        List<TextLine> figures = segs.stream().filter(TextLine::figure).toList();
+        if (figures.isEmpty() || text.size() < 2) {
+            return channel(segs, unit, tall);
+        }
+        List<List<TextLine>> sides = channel(text, unit, tall);
+        if (sides == null) {
+            return null;
+        }
+        double gutter = (sides.get(0).stream().mapToDouble(s -> s.bbox().x1()).max().orElse(0)
+                + sides.get(1).stream().mapToDouble(s -> s.bbox().x0()).min().orElse(0)) / 2;
+        for (TextLine f : figures) {
+            sides.get((f.bbox().x0() + f.bbox().x1()) / 2 < gutter ? 0 : 1).add(f);
+        }
+        return sides;
+    }
+
+    private static List<List<TextLine>> channel(List<TextLine> segs, double unit, boolean tall) {
         List<TextLine> byX = new ArrayList<>(segs);
         byX.sort(Comparator.comparingDouble(s -> s.bbox().x0()));
         double reach = byX.getFirst().bbox().x1();

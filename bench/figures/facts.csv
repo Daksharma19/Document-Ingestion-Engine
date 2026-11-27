@@ -1,8 +1,8 @@
 parser,files parsed,unsupported,errors,median s/page,total s,duplicate lines,CER (eurotext)
-docextract (ours),27/27,0,0,0.715,61.4,0.026,0.0024
-docling,27/27,0,0,6.084,534.5,0.031,0.0316
-pdfplumber,16/27,11,0,0.097,8.9,0.038,
-pymupdf,16/27,11,0,0.007,0.6,0.043,
-pypdf,16/27,11,0,0.076,3.9,0.041,
-"ocr-service (ours, OCR only)",24/27,3,0,4.909,338.6,0.02,0.0024
-tesseract,24/27,3,0,2.526,215.3,0.025,0.0243
+docextract (ours),27/27,0,0,0.98,78.3,0.026,0.0024
+docling,27/27,0,0,4.592,602.2,0.031,0.0316
+pdfplumber,16/27,11,0,0.093,8.3,0.038,
+pymupdf,16/27,11,0,0.006,0.4,0.043,
+pypdf,16/27,11,0,0.05,3.1,0.041,
+"ocr-service (ours, OCR only)",24/27,3,0,6.105,411.9,0.02,0.0024
+tesseract,24/27,3,0,2.363,202.3,0.025,0.0243
